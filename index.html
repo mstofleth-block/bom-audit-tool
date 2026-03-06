@@ -210,7 +210,7 @@ body { font-family: var(--font); background: var(--bg-page); color: var(--text-p
 .result-table tr:nth-child(even) td { background:#e8e8e8; }
 .result-table tr:hover td { background:var(--yellow); }
 td.match { color:#000; font-weight:bold; background:#e0f7ff; }
-td.mismatch { color:#fff; font-weight:bold; background:var(--magenta); }
+td.mismatch { color:#000; font-weight:bold; background:#f9c; text-transform:uppercase; }
 td.warning { color:#000; font-weight:bold; background:var(--yellow); }
 
 /* Modal */
@@ -740,11 +740,27 @@ function processFile(file, which) {
     complete: function(results) {
       const allRows = results.data;
       if (allRows.length < 2) { showToast('File has insufficient data', 'error'); return; }
-      // Find header row (first row with multiple non-empty cells)
+      // Find header row: scan for the first row that looks like real column headers.
+      // Skip junk rows (titles, blank rows, metadata) that often appear at the top of BOM exports.
+      // Strategy: first pass looks for keyword matches (strongest signal), second pass uses heuristics.
+      const headerKeywords = ['part','description','item','qty','quantity','level','rev','revision','manufacturer','vendor','usage','ref','mpn','p/n','number','name','bom','customer','supplier','designator','mfg','mfr'];
       let headerIdx = 0;
-      for (let i = 0; i < Math.min(allRows.length, 10); i++) {
-        const nonEmpty = allRows[i].filter(c => c && c.toString().trim()).length;
-        if (nonEmpty >= 3) { headerIdx = i; break; }
+      const scanLimit = Math.min(allRows.length, 50);
+      // Pass 1: look for a row with 2+ recognizable BOM header keywords
+      let found = false;
+      for (let i = 0; i < scanLimit; i++) {
+        const cells = allRows[i].map(c => (c || '').toString().trim()).filter(Boolean);
+        if (cells.length < 3) continue;
+        const lower = cells.map(c => c.toLowerCase());
+        const keywordHits = lower.filter(c => headerKeywords.some(kw => c.includes(kw))).length;
+        if (keywordHits >= 2 && cells.length >= 5) { headerIdx = i; found = true; break; }
+      }
+      // Pass 2: if no keyword match, fall back to first row with many non-empty cells
+      if (!found) {
+        for (let i = 0; i < scanLimit; i++) {
+          const cells = allRows[i].map(c => (c || '').toString().trim()).filter(Boolean);
+          if (cells.length >= 5) { headerIdx = i; break; }
+        }
       }
       const headers = allRows[headerIdx].map(h => (h || '').toString().trim());
       const dataRows = allRows.slice(headerIdx + 1).filter(r => r.some(c => c && c.toString().trim()));
@@ -908,6 +924,13 @@ function setupColumnMapping() {
           state.columnMap[which][field.key] = '__NA__';
           status.className = 'mapping-status na';
           status.textContent = '—';
+          // Auto-sync: set the other BOM's same field to N/A too
+          const otherSide = which === 'arena' ? 'cm' : 'arena';
+          const otherSelect = document.getElementById(otherSide + '-map-' + field.key);
+          if (otherSelect && otherSelect.value !== '__NA__') {
+            otherSelect.value = '__NA__';
+            otherSelect.dispatchEvent(new Event('change'));
+          }
         } else if (val) {
           state.columnMap[which][field.key] = val;
           status.className = 'mapping-status mapped';
@@ -1137,6 +1160,7 @@ function resetAudit() {
   document.getElementById('buildOther').classList.add('hidden');
   document.getElementById('metadata-confirm-card').classList.add('hidden');
   document.getElementById('inferred-info').innerHTML = '';
+  document.getElementById('multi-col-level').checked = false;
   ['arena','cm'].forEach(w => {
     const defaultName = w === 'arena' ? 'Arena BOM' : 'CM BOM';
     document.getElementById(w+'-upload-zone').classList.remove('has-file');
@@ -1181,13 +1205,19 @@ function getMergedLevel(row, headers, levelColName) {
   if (idx < 0) return '';
   const multiCol = document.getElementById('multi-col-level') && document.getElementById('multi-col-level').checked;
   if (!multiCol) return (row[idx] || '').toString().trim();
-  let levelStr = '';
-  for (let i = idx; i < headers.length; i++) {
-    if (i > idx && headers[i] && headers[i].trim()) break;
+  // Multi-column level structure: columns before the Part Description (Item Name)
+  // column are all level columns. Each row has a value in exactly one of these
+  // columns, indicating the item's level. The cell value is the level number.
+  const nameCol = (state.columnMap.cm.itemName || '').trim();
+  const nameIdx = nameCol ? headers.findIndex(h => (h || '').trim() === nameCol) : -1;
+  const stopIdx = nameIdx >= 0 ? nameIdx : headers.length;
+  // Scan columns 0 through stopIdx-1 for the first non-empty value
+  for (let i = 0; i < stopIdx; i++) {
     const val = (row[i] || '').toString().trim();
-    if (val && /^-?\d+$/.test(val)) levelStr = val;
+    if (val) return val; // This is the level value
   }
-  return levelStr || (row[idx] || '').toString().trim();
+  // Fallback to the mapped level column value
+  return (row[idx] || '').toString().trim();
 }
 
 function log(msg, type) {
@@ -1329,8 +1359,8 @@ async function runAudit() {
       const revIsMapped = isFieldMapped('revision');
       const ns = nameIsMapped ? similarity(a.itemName,c.itemName) : 100;
       const rm = revIsMapped ? a.normalizedRevision.toLowerCase()===c.normalizedRevision.toLowerCase() : true;
-      const nm = ns>=80;
-      if ((nameIsMapped || revIsMapped) && (!nm||!rm)) { bad=true; d.nameRev.push({itemNumber:a.rawItemNumber,cmItemNumber:c.rawItemNumber,arenaName:a.itemName,cmName:c.itemName,nameSimilarity:ns,nameMatchStatus:nm?'MATCH ('+ns+'%)':'MISMATCH ('+ns+'%)',arenaRev:a.revision,cmRev:c.revision,arenaNormRev:a.normalizedRevision,cmNormRev:c.normalizedRevision,revMatchStatus:rm?'MATCH':'MISMATCH',discrepancyType:(!nm&&!rm)?'Both':(!nm?'Name':'Revision'),arenaLine:a.lineNumber,cmLine:c.lineNumber}); }
+      const nm = ns===100;
+      if ((nameIsMapped || revIsMapped) && (!nm||!rm)) { bad=true; d.nameRev.push({itemNumber:a.rawItemNumber,cmItemNumber:c.rawItemNumber,arenaName:a.itemName,cmName:c.itemName,nameSimilarity:ns,nameMatchStatus:nm?'MATCH':'MISMATCH ('+ns+'%)',arenaRev:a.revision,cmRev:c.revision,arenaNormRev:a.normalizedRevision,cmNormRev:c.normalizedRevision,revMatchStatus:rm?'MATCH':'MISMATCH',discrepancyType:(!nm&&!rm)?'Both':(!nm?'Name':'Revision'),arenaLine:a.lineNumber,cmLine:c.lineNumber}); }
 
       // Level (skip if N/A, or if either item lacks a level value)
       if (isFieldMapped('level')&&a.hasLevel&&c.hasLevel&&a.normalizedLevel!==null&&c.normalizedLevel!==null&&!a.isAlternate&&!c.isAlternate&&a.normalizedLevel!==c.normalizedLevel) { bad=true; d.level.push({itemNumber:a.rawItemNumber,itemName:a.itemName,arenaLevelOrig:a.level,cmLevelOrig:c.level,arenaLevelNorm:a.normalizedLevel,cmLevelNorm:c.normalizedLevel,difference:Math.abs(a.normalizedLevel-c.normalizedLevel),arenaLine:a.lineNumber,cmLine:c.lineNumber}); }
@@ -1357,8 +1387,8 @@ async function runAudit() {
       const gen=a.itemNumber.startsWith('E-GRE')||a.itemNumber.startsWith('E-GCA');
       if (mfrMapped && !gen) {
         const am=(a.mpn||'').toUpperCase().trim(), cm2=(c.mpn||'').toUpperCase().trim();
-        const ms=similarity(a.manufacturer,c.manufacturer), mm=am===cm2, mfm=ms>=80;
-        if (!mm||!mfm) { if(am||cm2||a.manufacturer||c.manufacturer) { bad=true; d.mpnMfr.push({mpn:am||cm2||'N/A',arenaItemNumber:a.rawItemNumber,cmItemNumber:c.rawItemNumber,arenaManufacturer:a.manufacturer,cmManufacturer:c.manufacturer,arenaMPN:a.mpn,cmMPN:c.mpn,mpnMatch:mm?'MATCH':((!am&&!cm2)?'No MPN':'MISMATCH'),mfrMatchPct:ms+'%',discrepancyType:(!mm&&!mfm)?'Both':(!mm?'MPN':'Manufacturer'),arenaLine:a.lineNumber,cmLine:c.lineNumber}); } }
+        const ms=similarity(a.manufacturer,c.manufacturer), mm=am===cm2, mfm=ms===100;
+        if (!mm||!mfm) { if(am||cm2||a.manufacturer||c.manufacturer) { bad=true; d.mpnMfr.push({mpn:am||cm2||'N/A',arenaItemNumber:a.rawItemNumber,cmItemNumber:c.rawItemNumber,arenaManufacturer:a.manufacturer,cmManufacturer:c.manufacturer,arenaMPN:a.mpn,cmMPN:c.mpn,mpnMatch:mm?'MATCH':((!am&&!cm2)?'No MPN':'MISMATCH'),mfrMatchPct:ms===100?'MATCH':'MISMATCH ('+ms+'%)',discrepancyType:(!mm&&!mfm)?'Both':(!mm?'MPN':'Manufacturer'),arenaLine:a.lineNumber,cmLine:c.lineNumber}); } }
       }
 
       // RefDes (EE items in EE or FULL mode, skip if N/A)
@@ -1527,22 +1557,22 @@ function buildWorkbook() {
 
   // Tab 3: Item-Name-Rev Discrepancies
   const nrHeader = ['DISCREPANCIES ONLY - Items with exact matches are not shown'];
-  const nrCols = [bomB+' Line #',bomB+' Item Number',bomA+' Line #',bomA+' Item Number','Match Status',bomB+' Item Name',bomA+' Item Name','Name Match Status',bomB+' Revision',bomA+' Revision','Revision Match Status'];
+  const nrCols = [bomA+' Line #',bomA+' Item Number',bomB+' Line #',bomB+' Item Number',bomA+' Item Name',bomB+' Item Name','Name Match Status',bomA+' Revision',bomB+' Revision','Revision Match Status'];
   const nrData = [nrHeader, nrCols];
-  d.nameRev.forEach(x => nrData.push([x.cmLine, x.cmItemNumber, x.arenaLine, x.itemNumber, 'MATCHED', x.cmName, x.arenaName, x.nameMatchStatus, x.cmRev, x.arenaRev, x.revMatchStatus]));
+  d.nameRev.forEach(x => nrData.push([x.arenaLine, x.itemNumber, x.cmLine, x.cmItemNumber, x.arenaName, x.cmName, x.nameMatchStatus, x.arenaRev, x.cmRev, x.revMatchStatus]));
   nrData.push([]);
   nrData.push(['Total discrepancies:', d.nameRev.length]);
   nrData.push(['Name mismatches:', d.nameRev.filter(x=>x.discrepancyType==='Name'||x.discrepancyType==='Both').length]);
   nrData.push(['Revision mismatches:', d.nameRev.filter(x=>x.discrepancyType==='Revision'||x.discrepancyType==='Both').length]);
   const nrWs = XLSX.utils.aoa_to_sheet(nrData);
-  nrWs['!cols'] = Array(11).fill({wch:18});
+  nrWs['!cols'] = Array(10).fill({wch:18});
   XLSX.utils.book_append_sheet(wb, nrWs, 'Item-Name-Rev Discrepancies');
 
   // Tab 4: BOM Level Discrepancies
   const lvlHeader = ['DISCREPANCIES ONLY - Items with matching levels are not shown'];
-  const lvlCols = [bomB+' Line #',bomB+' Level (Original)',bomB+' Level (Normalized)',bomB+' Item Number',bomA+' Line #',bomA+' Level (Original)',bomA+' Level (Normalized)',bomA+' Item Number','Level Match Status'];
+  const lvlCols = [bomA+' Line #',bomA+' Item Number',bomA+' Level (Original)',bomA+' Level (Normalized)',bomB+' Line #',bomB+' Item Number',bomB+' Level (Original)',bomB+' Level (Normalized)','Level Match Status'];
   const lvlData = [lvlHeader, lvlCols];
-  d.level.forEach(x => lvlData.push([x.cmLine, x.cmLevelOrig, x.cmLevelNorm, x.itemNumber, x.arenaLine, x.arenaLevelOrig, x.arenaLevelNorm, x.itemNumber, 'MISMATCH']));
+  d.level.forEach(x => lvlData.push([x.arenaLine, x.itemNumber, x.arenaLevelOrig, x.arenaLevelNorm, x.cmLine, x.itemNumber, x.cmLevelOrig, x.cmLevelNorm, 'MISMATCH']));
   lvlData.push([]);
   lvlData.push(['Total level discrepancies:', d.level.length]);
   if (d.level.length) lvlData.push(['Average difference:', (d.level.reduce((s,x)=>s+x.difference,0)/d.level.length).toFixed(1)]);
@@ -1552,23 +1582,20 @@ function buildWorkbook() {
 
   // Tab 5: Quantity Discrepancies
   const qHeader = ['DISCREPANCIES ONLY - Items with matching quantities are not shown'];
-  const qCols = [bomB+' Line #',bomB+' Item Number',bomB+' Quantity',bomA+' Line #',bomA+' Item Number',bomA+' Quantity','Quantity Match','Difference','% Difference','Severity'];
+  const qCols = [bomA+' Line #',bomA+' Item Number',bomA+' Quantity',bomB+' Line #',bomB+' Item Number',bomB+' Quantity','Quantity Match','Difference'];
   const qData = [qHeader, qCols];
-  d.quantity.forEach(x => qData.push([x.cmLine, x.cmItemNumber, x.cmQty, x.arenaLine, x.itemNumber, x.arenaQty, 'MISMATCH', x.difference, x.pctDifference+'%', x.severity]));
+  d.quantity.forEach(x => qData.push([x.arenaLine, x.itemNumber, x.arenaQty, x.cmLine, x.cmItemNumber, x.cmQty, 'MISMATCH', x.difference]));
   qData.push([]);
   qData.push(['Total quantity discrepancies:', d.quantity.length]);
-  qData.push(['Critical:', d.quantity.filter(x=>x.severity==='Critical').length]);
-  qData.push(['Warning:', d.quantity.filter(x=>x.severity==='Warning').length]);
-  qData.push(['Minor:', d.quantity.filter(x=>x.severity==='Minor').length]);
   const qWs = XLSX.utils.aoa_to_sheet(qData);
-  qWs['!cols'] = Array(10).fill({wch:16});
+  qWs['!cols'] = Array(8).fill({wch:16});
   XLSX.utils.book_append_sheet(wb, qWs, 'Quantity Discrepancies');
 
   // Tab 6: MPN & Manufacturer Discrepancies
   const mpnHeader = ['DISCREPANCIES ONLY - Items with matching MPN/Manufacturer are not shown'];
-  const mpnCols = [bomA+' MPN',bomB+' MPN',bomA+' Line #',bomA+' Item Numbers',bomA+' Manufacturer',bomB+' Line #',bomB+' Item Numbers',bomB+' Manufacturer','Item/MPN Match','Manufacturer Match %'];
+  const mpnCols = [bomA+' Line #',bomA+' Item Numbers',bomA+' MPN',bomA+' Manufacturer',bomB+' Line #',bomB+' Item Numbers',bomB+' MPN',bomB+' Manufacturer','MPN Match','Manufacturer Match %'];
   const mpnData = [mpnHeader, mpnCols];
-  d.mpnMfr.forEach(x => mpnData.push([x.arenaMPN, x.cmMPN, x.arenaLine, x.arenaItemNumber, x.arenaManufacturer, x.cmLine, x.cmItemNumber, x.cmManufacturer, x.mpnMatch, x.mfrMatchPct]));
+  d.mpnMfr.forEach(x => mpnData.push([x.arenaLine, x.arenaItemNumber, x.arenaMPN, x.arenaManufacturer, x.cmLine, x.cmItemNumber, x.cmMPN, x.cmManufacturer, x.mpnMatch, x.mfrMatchPct]));
   mpnData.push([]);
   mpnData.push(['Total MPN/Mfr discrepancies:', d.mpnMfr.length]);
   mpnData.push(['Manufacturer only:', d.mpnMfr.filter(x=>x.discrepancyType==='Manufacturer').length]);
@@ -1690,16 +1717,24 @@ function populateResults() {
     return sel ? parseInt(sel.value) : 50;
   }
 
-  function addPreview(title, headers, rows, maxRows) {
-    maxRows = maxRows || getPreviewRowCount();
+  function addPreview(title, headers, rows, options) {
+    options = options || {};
+    const maxRows = options.maxRows || getPreviewRowCount();
+    const skipped = options.skipped || false;
     const div = document.createElement('div');
     div.className = 'collapsible';
     const hdr = document.createElement('div');
     hdr.className = 'collapsible-header';
-    hdr.innerHTML = '<span>'+title+' <span class="badge badge-red">'+rows.length+'</span></span><span class="arrow">▶</span>';
+    if (skipped) {
+      hdr.innerHTML = '<span>'+title+' <span class="badge badge-yellow">SKIPPED</span></span><span class="arrow">▶</span>';
+    } else {
+      hdr.innerHTML = '<span>'+title+' <span class="badge badge-red">'+rows.length+'</span></span><span class="arrow">▶</span>';
+    }
     const body = document.createElement('div');
     body.className = 'collapsible-body';
-    if (rows.length === 0) {
+    if (skipped) {
+      body.innerHTML = '<p><b>Comparison skipped</b> — one or more required fields were set to N/A in column mapping.</p>';
+    } else if (rows.length === 0) {
       body.innerHTML = '<p><b><span class="pxl-xs">✅</span> No discrepancies found</b></p>';
     } else {
       let html = '<table class="result-table"><thead><tr>';
@@ -1710,9 +1745,8 @@ function populateResults() {
         row.forEach(c => {
           let cls = '';
           const s = (c||'').toString();
-          if (s === 'MISMATCH' || s.includes('MISMATCH') || s === 'Critical') cls = ' class="mismatch"';
+          if (s === 'MISMATCH' || s.includes('MISMATCH') || s === 'No MPN') cls = ' class="mismatch"';
           else if (s === 'MATCH' || s.includes('MATCH')) cls = ' class="match"';
-          else if (s === 'Warning') cls = ' class="warning"';
           html += '<td'+cls+'>'+s+'</td>';
         });
         html += '</tr>';
@@ -1728,30 +1762,36 @@ function populateResults() {
   }
 
   // Name/Rev preview
+  const nameRevSkipped = !isFieldMapped('itemName') && !isFieldMapped('revision');
   addPreview('Item Name & Revision Discrepancies',
-    [state.bomAName+' Item #',state.bomBName+' Item #',state.bomAName+' Name',state.bomBName+' Name','Name Match',state.bomAName+' Rev',state.bomBName+' Rev','Rev Match'],
-    d.nameRev.map(x=>[x.itemNumber,x.cmItemNumber,x.arenaName,x.cmName,x.nameMatchStatus,x.arenaRev,x.cmRev,x.revMatchStatus]));
+    [state.bomAName+' Item #',state.bomBName+' Item #',state.bomAName+' Name',state.bomBName+' Name','Name Match?',state.bomAName+' Rev',state.bomBName+' Rev','Rev Match?'],
+    d.nameRev.map(x=>[x.itemNumber,x.cmItemNumber,x.arenaName,x.cmName,x.nameMatchStatus,x.arenaRev,x.cmRev,x.revMatchStatus]),
+    {skipped: nameRevSkipped});
 
   // Level preview
   addPreview('BOM Level Discrepancies',
-    ['Item #',state.bomAName+' Lvl (Orig)',state.bomAName+' Lvl (Norm)',state.bomBName+' Lvl (Orig)',state.bomBName+' Lvl (Norm)','Difference'],
-    d.level.map(x=>[x.itemNumber,x.arenaLevelOrig,x.arenaLevelNorm,x.cmLevelOrig,x.cmLevelNorm,x.difference]));
+    ['Item #',state.bomAName+' Level (Normalized)',state.bomBName+' Level (Normalized)','Match?'],
+    d.level.map(x=>[x.itemNumber,x.arenaLevelNorm,x.cmLevelNorm,'MISMATCH']),
+    {skipped: !isFieldMapped('level')});
 
   // Quantity preview
   addPreview('Quantity Discrepancies',
-    ['Item #',state.bomAName+' Qty',state.bomBName+' Qty','Difference','% Diff','Severity'],
-    d.quantity.map(x=>[x.itemNumber,x.arenaQty,x.cmQty,x.difference,x.pctDifference+'%',x.severity]));
+    ['Item #',state.bomAName+' Qty',state.bomBName+' Qty','Difference','Match?'],
+    d.quantity.map(x=>[x.itemNumber,x.arenaQty,x.cmQty,x.difference,'MISMATCH']),
+    {skipped: !isFieldMapped('quantity')});
 
   // MPN/Mfr preview
   addPreview('MPN & Manufacturer Discrepancies',
-    [state.bomAName+' MPN',state.bomBName+' MPN',state.bomAName+' Item',state.bomBName+' Item',state.bomAName+' Mfr',state.bomBName+' Mfr','MPN Match','Mfr Match %'],
-    d.mpnMfr.map(x=>[x.arenaMPN,x.cmMPN,x.arenaItemNumber,x.cmItemNumber,x.arenaManufacturer,x.cmManufacturer,x.mpnMatch,x.mfrMatchPct]));
+    [state.bomAName+' Item',state.bomAName+' MPN',state.bomAName+' Mfr',state.bomBName+' Item',state.bomBName+' MPN',state.bomBName+' Mfr','MPN Match?','Mfr Match?'],
+    d.mpnMfr.map(x=>[x.arenaItemNumber,x.arenaMPN,x.arenaManufacturer,x.cmItemNumber,x.cmMPN,x.cmManufacturer,x.mpnMatch,x.mfrMatchPct]),
+    {skipped: !isFieldMapped('manufacturer') && !isFieldMapped('mpn')});
 
   // Ref Des preview (EE)
   if (includesRefDes()) {
     addPreview('Reference Designator Discrepancies',
-      ['Item #','Issue Type',state.bomAName+' Ref Count',state.bomBName+' Ref Count',state.bomAName+' Qty',state.bomAName+' Only',state.bomBName+' Only'],
-      d.refDes.map(x=>[x.itemNumber,x.issueType,x.arenaRefCount,x.cmRefCount,x.arenaQty,x.arenaOnly,x.cmOnly]));
+      ['Item #','Issue Type',state.bomAName+' Ref Count',state.bomBName+' Ref Count',state.bomAName+' Only',state.bomBName+' Only'],
+      d.refDes.map(x=>[x.itemNumber,x.issueType,x.arenaRefCount,x.cmRefCount,x.arenaOnly,x.cmOnly]),
+      {skipped: !isFieldMapped('refDes')});
   }
 
   // Missing Items preview
@@ -1790,6 +1830,8 @@ document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('.upload-zone input[type=file]').forEach(inp => {
     inp.addEventListener('click', e => e.stopPropagation());
   });
+  // Ensure multi-col checkbox is unchecked on load
+  document.getElementById('multi-col-level').checked = false;
 });
 </script>
 </body>
