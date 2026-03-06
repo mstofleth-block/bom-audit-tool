@@ -281,7 +281,7 @@ td.warning { color:#000; font-weight:bold; background:var(--yellow); }
   <!-- Step 1: Configure -->
   <div class="step-panel active" id="step-1">
     <div class="card">
-      <h2><span class="pxl-xs">⚙️</span> Audit Configuration</h2>
+      <h2>Audit Configuration</h2>
       <p class="subtitle">Select audit type and enter project metadata</p>
       <div class="audit-type-cards" style="grid-template-columns:1fr 1fr 1fr">
         <div class="audit-card" id="ee-card" onclick="selectAuditType('EE')">
@@ -1555,16 +1555,16 @@ function buildWorkbook() {
 
   // Tab 6: MPN & Manufacturer Discrepancies
   const mpnHeader = ['DISCREPANCIES ONLY - Items with matching MPN/Manufacturer are not shown'];
-  const mpnCols = ['MPN',bomA+' Line #',bomA+' Item Numbers',bomA+' Manufacturer',bomB+' Line #',bomB+' Item Numbers',bomB+' Manufacturer','Item/MPN Match','Manufacturer Match %'];
+  const mpnCols = [bomA+' MPN',bomB+' MPN',bomA+' Line #',bomA+' Item Numbers',bomA+' Manufacturer',bomB+' Line #',bomB+' Item Numbers',bomB+' Manufacturer','Item/MPN Match','Manufacturer Match %'];
   const mpnData = [mpnHeader, mpnCols];
-  d.mpnMfr.forEach(x => mpnData.push([x.mpn, x.arenaLine, x.arenaItemNumber, x.arenaManufacturer, x.cmLine, x.cmItemNumber, x.cmManufacturer, x.mpnMatch, x.mfrMatchPct]));
+  d.mpnMfr.forEach(x => mpnData.push([x.arenaMPN, x.cmMPN, x.arenaLine, x.arenaItemNumber, x.arenaManufacturer, x.cmLine, x.cmItemNumber, x.cmManufacturer, x.mpnMatch, x.mfrMatchPct]));
   mpnData.push([]);
   mpnData.push(['Total MPN/Mfr discrepancies:', d.mpnMfr.length]);
   mpnData.push(['Manufacturer only:', d.mpnMfr.filter(x=>x.discrepancyType==='Manufacturer').length]);
   mpnData.push(['MPN only:', d.mpnMfr.filter(x=>x.discrepancyType==='MPN').length]);
   mpnData.push(['Both:', d.mpnMfr.filter(x=>x.discrepancyType==='Both').length]);
   const mpnWs = XLSX.utils.aoa_to_sheet(mpnData);
-  mpnWs['!cols'] = Array(9).fill({wch:20});
+  mpnWs['!cols'] = Array(10).fill({wch:20});
   XLSX.utils.book_append_sheet(wb, mpnWs, 'MPN-Mfr Discrepancies');
 
   // Tab 7: Ref Des Discrepancies (EE only)
@@ -1728,8 +1728,8 @@ function populateResults() {
 
   // MPN/Mfr preview
   addPreview('MPN & Manufacturer Discrepancies',
-    ['MPN',state.bomAName+' Item',state.bomBName+' Item',state.bomAName+' Mfr',state.bomBName+' Mfr','MPN Match','Mfr Match %'],
-    d.mpnMfr.map(x=>[x.mpn,x.arenaItemNumber,x.cmItemNumber,x.arenaManufacturer,x.cmManufacturer,x.mpnMatch,x.mfrMatchPct]));
+    [state.bomAName+' MPN',state.bomBName+' MPN',state.bomAName+' Item',state.bomBName+' Item',state.bomAName+' Mfr',state.bomBName+' Mfr','MPN Match','Mfr Match %'],
+    d.mpnMfr.map(x=>[x.arenaMPN,x.cmMPN,x.arenaItemNumber,x.cmItemNumber,x.arenaManufacturer,x.cmManufacturer,x.mpnMatch,x.mfrMatchPct]));
 
   // Ref Des preview (EE)
   if (includesRefDes()) {
