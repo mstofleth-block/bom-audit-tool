@@ -6,186 +6,238 @@
 <title>BOM Audit Tool</title>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<!-- retro CMYK theme -->
 <style>
 :root {
-  --bg-page: #0d1117; --bg-card: #161b22; --bg-input: #0d1117;
-  --border: #30363d; --border-focus: #58a6ff;
-  --accent: #58a6ff; --success: #3fb950; --error: #f85149; --warning: #d29922; --orange: #e3872d;
-  --text-primary: #e6edf3; --text-secondary: #8b949e;
-  --gradient-start: #1a1a2e; --gradient-end: #16213e;
-  --radius: 8px; --transition: 0.3s ease;
+  --cyan: #00AEEF; --magenta: #EC008C; --yellow: #FFF200; --black: #000000;
+  --bg-page: #c0c0c0; --bg-card: #d4d4d4; --bg-input: #ffffff;
+  --border: #808080; --border-focus: #000000;
+  --accent: #00AEEF; --accent-light: #00AEEF;
+  --success: #00AEEF; --error: #EC008C; --warning: #FFF200; --orange: #EC008C;
+  --text-primary: #000000; --text-secondary: #333333;
+  --gradient-start: #00AEEF; --gradient-end: #00AEEF;
+  --radius: 0px; --radius-lg: 0px; --transition: 0.1s ease;
+  --font: 'Arial', 'Helvetica Neue', Helvetica, sans-serif;
+  --font-mono: 'Courier New', Courier, monospace;
+  --shadow-sm: inset -1px -1px 0 #808080, inset 1px 1px 0 #ffffff;
+  --shadow-md: inset -1px -1px 0 #808080, inset 1px 1px 0 #ffffff;
+  --shadow-glow: none;
+  --shadow-card: inset -1px -1px 0 #808080, inset 1px 1px 0 #ffffff;
+  --accent-glow: transparent;
+  --red: #EC008C; --blue: #00AEEF; --green: #00AEEF; --purple: #EC008C; --pink: #EC008C;
 }
 * { margin:0; padding:0; box-sizing:border-box; }
-body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg-page); color: var(--text-primary); min-height:100vh; }
-.app { max-width:1200px; margin:0 auto; padding:20px; }
+body { font-family: var(--font); background: var(--bg-page); color: var(--text-primary); min-height:100vh; }
+.app { max-width:1200px; margin:0 auto; padding:16px 12px; }
 
 /* Header */
-.header { background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end)); border-radius: var(--radius); padding:24px 32px; margin-bottom:24px; display:flex; justify-content:space-between; align-items:center; border:1px solid var(--border); }
-.header h1 { font-size:28px; font-weight:700; background: linear-gradient(90deg, #58a6ff, #a371f7); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
-.header p { color: var(--text-secondary); margin-top:4px; font-size:14px; }
-.info-btn { background:none; border:1px solid var(--border); color:var(--text-secondary); width:36px; height:36px; border-radius:50%; cursor:pointer; font-size:18px; transition:var(--transition); }
-.info-btn:hover { border-color:var(--accent); color:var(--accent); }
+.header { background: #e0e0e0; padding:12px 16px; margin-bottom:12px; display:flex; justify-content:space-between; align-items:center; border:2px outset #ffffff; position:relative; }
+.header::before { display:none; }
+.header h1 { font-size:22px; font-weight:bold; color:#000; position:relative; }
+.header p { color: #333; margin-top:2px; font-size:12px; position:relative; }
+.info-btn { background:var(--bg-card); border:2px outset #ffffff; color:#000; width:28px; height:28px; border-radius:0; cursor:pointer; font-size:14px; transition:var(--transition); position:relative; }
+.info-btn:hover { background:#ffffff; }
+.info-btn:active { border-style:inset; }
 
 /* Step Indicator */
-.step-indicator { display:flex; justify-content:center; align-items:center; margin-bottom:32px; gap:0; }
+.step-indicator { display:flex; justify-content:center; align-items:center; margin-bottom:16px; gap:0; background:var(--bg-card); padding:12px 20px 32px; border:2px inset #ffffff; }
 .step-item { display:flex; align-items:center; }
-.step-circle { width:40px; height:40px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:600; font-size:14px; border:2px solid var(--border); color:var(--text-secondary); background:var(--bg-card); transition:var(--transition); cursor:default; }
-.step-circle.active { border-color:var(--accent); color:var(--accent); background:rgba(88,166,255,0.1); box-shadow:0 0 12px rgba(88,166,255,0.3); }
-.step-circle.completed { border-color:var(--success); color:#fff; background:var(--success); }
-.step-label { position:absolute; top:48px; font-size:11px; color:var(--text-secondary); white-space:nowrap; text-align:center; }
-.step-label.active { color:var(--accent); }
+.step-circle { width:36px; height:36px; border-radius:0; display:flex; align-items:center; justify-content:center; font-weight:bold; font-size:14px; border:2px outset #ffffff; color:#000; background:#fff; transition:var(--transition); cursor:default; }
+.step-circle.active { border-style:inset; background:var(--yellow); color:#000; }
+.step-circle.completed { border-style:inset; background:#000; color:#fff; }
+.step-label { position:absolute; top:44px; font-size:12px; color:#000; white-space:nowrap; text-align:center; font-weight:bold; }
+.step-label.active { font-weight:bold; color:#000; }
 .step-wrapper { position:relative; display:flex; flex-direction:column; align-items:center; }
-.step-line { width:60px; height:2px; background:var(--border); margin:0 4px; }
-.step-line.completed { background:var(--success); }
+.step-line { width:80px; height:3px; background:#808080; margin:0 8px; border-radius:0; transition:var(--transition); }
+.step-line.completed { background:#000; }
 
 /* Panels */
-.step-panel { display:none; animation: fadeIn 0.3s ease; }
+.step-panel { display:none; }
 .step-panel.active { display:block; }
-@keyframes fadeIn { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+@keyframes fadeIn { from{opacity:1} to{opacity:1} }
 
 /* Cards */
-.card { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius); padding:24px; margin-bottom:16px; }
-.card h2 { font-size:20px; margin-bottom:4px; }
-.card .subtitle { color:var(--text-secondary); font-size:14px; margin-bottom:20px; }
+.card { background:var(--bg-card); border:2px inset #ffffff; padding:16px; margin-bottom:10px; transition:var(--transition); }
+.card:hover { }
+.card h2 { font-size:16px; margin-bottom:4px; font-weight:bold; color:#000; }
+/* Per-step card accent colors */
+#step-1 .card { border-top:4px solid var(--cyan); }
+#step-2 .card { border-top:4px solid var(--magenta); }
+#step-3 .card { border-top:4px solid var(--yellow); }
+#step-4 .card { border-top:4px solid #000; }
+#step-5 .card { border-top:4px solid var(--magenta); }
+.card .subtitle { color:#333; font-size:12px; margin-bottom:12px; line-height:1.4; }
 
 /* Audit Type Cards */
 .audit-type-cards { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:24px; }
-.audit-card { background:var(--bg-card); border:2px solid var(--border); border-radius:var(--radius); padding:24px; cursor:pointer; transition:var(--transition); text-align:center; }
-.audit-card:hover { border-color:var(--accent); transform:translateY(-2px); }
-.audit-card.selected { border-color:var(--accent); background:rgba(88,166,255,0.05); box-shadow:0 0 20px rgba(88,166,255,0.15); }
-.audit-card .icon { font-size:48px; margin-bottom:12px; }
-.audit-card h3 { font-size:18px; margin-bottom:8px; }
-.audit-card p { color:var(--text-secondary); font-size:13px; line-height:1.5; }
+.audit-card { background: var(--bg-card); border:2px outset #ffffff; padding:16px 12px; cursor:pointer; transition:var(--transition); text-align:center; position:relative; }
+.audit-card:hover { background:#ffffff; }
+.audit-card:active { border-style:inset; }
+#ee-card.selected { background:var(--yellow); border-style:inset; }
+#pd-card.selected { background:var(--cyan); border-style:inset; }
+#full-card.selected { background:var(--magenta); color:#fff; border-style:inset; }
+#full-card.selected h3, #full-card.selected p { color:#fff; }
+/* Pixelated retro emoji */
+.pxl { display:inline-block; font-size:12px; image-rendering:pixelated; -ms-interpolation-mode:nearest-neighbor; transform:scale(3); transform-origin:center; filter:contrast(1.4); margin:14px 0; }
+.pxl-sm { display:inline-block; font-size:10px; image-rendering:pixelated; -ms-interpolation-mode:nearest-neighbor; transform:scale(2); transform-origin:center; filter:contrast(1.4); }
+.pxl-xs { display:inline-block; font-size:12px; image-rendering:pixelated; -ms-interpolation-mode:nearest-neighbor; transform:scale(1.4); transform-origin:center; filter:contrast(1.4); }
+/* Win98 hourglass loading spinner */
+.win98-loading { display:flex; flex-direction:column; align-items:center; gap:6px; }
+.win98-loading .hourglass { font-size:24px; animation:hourglass-flip 1s steps(2) infinite; }
+@keyframes hourglass-flip { 0%{content:'⏳';transform:rotate(0deg)} 50%{transform:rotate(180deg)} 100%{transform:rotate(360deg)} }
+.win98-loading .loading-text { font-size:12px; font-weight:bold; color:#333; }
+.audit-card .icon { margin-bottom:16px; }
+.audit-card h3 { font-size:14px; margin-bottom:4px; font-weight:bold; }
+.audit-card p { color:#333; font-size:12px; line-height:1.4; }
 
 /* Form */
-.form-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
-.form-group { display:flex; flex-direction:column; gap:6px; }
-.form-group label { font-size:13px; color:var(--text-secondary); font-weight:500; }
-.form-group input, .form-group select { background:var(--bg-input); border:1px solid var(--border); color:var(--text-primary); padding:10px 12px; border-radius:6px; font-size:14px; transition:var(--transition); }
-.form-group input:focus, .form-group select:focus { outline:none; border-color:var(--accent); box-shadow:0 0 0 3px rgba(88,166,255,0.15); }
+.form-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.form-group { display:flex; flex-direction:column; gap:3px; }
+.form-group label { font-size:12px; color:#000; font-weight:bold; }
+.form-group input, .form-group select { background:#fff; border:2px inset #ffffff; color:#000; padding:4px 6px; border-radius:0; font-size:13px; font-family:var(--font); }
+.form-group input:focus, .form-group select:focus { outline:1px dotted #000; }
+.form-group input::placeholder { color:#808080; }
 .form-group select { cursor:pointer; }
 
 /* Upload Zones */
-.upload-zones { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
-.upload-zone { border:2px dashed var(--border); border-radius:var(--radius); padding:32px; text-align:center; cursor:pointer; transition:var(--transition); background:var(--bg-card); min-height:200px; display:flex; flex-direction:column; align-items:center; justify-content:center; }
-.upload-zone:hover, .upload-zone.dragover { border-color:var(--accent); background:rgba(88,166,255,0.03); }
-.upload-zone.has-file { border-color:var(--success); border-style:solid; }
-.upload-zone .uz-icon { font-size:40px; margin-bottom:12px; }
-.upload-zone h3 { margin-bottom:8px; font-size:16px; }
-.upload-zone p { color:var(--text-secondary); font-size:13px; }
-.file-info { margin-top:12px; padding:12px; background:rgba(63,185,80,0.1); border-radius:6px; text-align:left; width:100%; }
-.file-info .fi-name { font-weight:600; color:var(--success); }
-.file-info .fi-detail { font-size:12px; color:var(--text-secondary); margin-top:4px; }
+.upload-zones { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.upload-zone { border:2px dashed #808080; padding:20px 12px; text-align:center; cursor:pointer; transition:var(--transition); background:var(--bg-card); min-height:140px; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+.upload-zone:hover, .upload-zone.dragover { border-color:#000; background:#ffffff; }
+.upload-zone.has-file { border:2px solid var(--cyan); background:#e0f7ff; }
+.upload-zone .uz-icon { margin-bottom:8px; }
+.upload-zone h3 { margin-bottom:4px; font-size:13px; font-weight:bold; }
+.upload-zone p { color:#333; font-size:12px; }
+.file-info { margin-top:8px; padding:8px; background:#e0f7ff; border:1px solid var(--cyan); text-align:left; width:100%; }
+.file-info .fi-name { font-weight:bold; color:#000; }
+.file-info .fi-detail { font-size:12px; color:#333; margin-top:2px; font-family:var(--font-mono); }
 
 
 
 /* Column Mapping */
-.mapping-container { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
-.mapping-panel { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius); padding:20px; }
-.mapping-panel h3 { font-size:16px; margin-bottom:16px; padding-bottom:8px; border-bottom:1px solid var(--border); }
-.mapping-row { display:flex; align-items:center; gap:10px; margin-bottom:10px; }
-.mapping-row label { width:140px; font-size:13px; color:var(--text-secondary); flex-shrink:0; }
-.mapping-row select { flex:1; background:var(--bg-input); border:1px solid var(--border); color:var(--text-primary); padding:8px; border-radius:6px; font-size:13px; }
-.mapping-status { width:24px; height:24px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:14px; flex-shrink:0; }
-.mapping-status.mapped { color:var(--success); }
-.mapping-status.unmapped { color:var(--warning); }
-.mapping-status.na { color:var(--text-secondary); font-weight:700; }
+.mapping-container { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.mapping-panel { background:var(--bg-card); border:2px inset #ffffff; padding:12px; }
+.mapping-panel h3 { font-size:13px; font-weight:bold; margin-bottom:10px; padding-bottom:6px; border-bottom:1px solid #808080; }
+.mapping-row { display:flex; align-items:center; gap:6px; margin-bottom:6px; }
+.mapping-row label { width:130px; font-size:12px; color:#000; flex-shrink:0; font-weight:bold; }
+.mapping-row select { flex:1; background:#fff; border:2px inset #ffffff; color:#000; padding:3px 4px; font-size:12px; font-family:var(--font); }
+.mapping-row select:focus { outline:1px dotted #000; }
+.mapping-status { width:20px; height:20px; border-radius:0; display:flex; align-items:center; justify-content:center; font-size:12px; flex-shrink:0; font-weight:bold; }
+.mapping-status.mapped { color:#000; background:var(--cyan); }
+.mapping-status.unmapped { color:#000; background:var(--yellow); }
+.mapping-status.na { color:#000; background:#c0c0c0; font-weight:bold; }
 
 /* Buttons */
-.btn { padding:10px 24px; border-radius:6px; font-size:14px; font-weight:600; cursor:pointer; border:none; transition:var(--transition); display:inline-flex; align-items:center; gap:8px; }
-.btn-primary { background:var(--accent); color:#fff; }
-.btn-primary:hover { background:#4090e0; }
+.btn { padding:6px 16px; border-radius:0; font-size:12px; font-weight:bold; cursor:pointer; border:2px outset #ffffff; transition:var(--transition); display:inline-flex; align-items:center; gap:6px; font-family:var(--font); background:var(--bg-card); color:#000; }
+.btn:active { border-style:inset; }
+.btn-primary { background:var(--cyan); color:#000; }
+.btn-primary:hover { background:#33c4ff; }
+/* Per-step primary button theming */
+#step-2 .btn-primary { background:var(--magenta); color:#fff; }
+#step-2 .btn-primary:hover { background:#ff33aa; }
+#step-3 .btn-primary { background:var(--yellow); color:#000; }
+#step-3 .btn-primary:hover { background:#fff44f; }
+#step-4 .btn-primary { background:#000; color:#fff; }
+#step-4 .btn-primary:hover { background:#333; }
+#step-4 .btn-primary.btn-pulse { background:var(--cyan); color:#000; border-color:var(--magenta); }
 .btn-primary:disabled { opacity:0.5; cursor:not-allowed; }
-.btn-success { background:var(--success); color:#fff; }
-.btn-success:hover { background:#36a346; }
-.btn-secondary { background:var(--border); color:var(--text-primary); }
-.btn-secondary:hover { background:#444c56; }
-.btn-danger { background:var(--error); color:#fff; }
-.btn-lg { padding:14px 36px; font-size:16px; }
-.nav-buttons { display:flex; justify-content:space-between; margin-top:24px; }
+.btn-success { background:var(--magenta); color:#fff; }
+.btn-success:hover { background:#ff33aa; }
+.btn-secondary { background:var(--bg-card); color:#000; }
+.btn-secondary:hover { background:#ffffff; }
+#step-2 .btn-secondary { border-color:var(--cyan); }
+#step-3 .btn-secondary { border-color:var(--magenta); }
+#step-4 .btn-secondary { border-color:var(--yellow); }
+.btn-danger { background:var(--magenta); color:#fff; }
+.btn-lg { padding:8px 24px; font-size:14px; font-weight:bold; }
+.nav-buttons { display:flex; justify-content:space-between; margin-top:12px; }
 
 /* Review Grid */
-.review-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(250px,1fr)); gap:16px; margin-bottom:24px; }
-.review-card { background:var(--bg-input); border:1px solid var(--border); border-radius:var(--radius); padding:16px; }
-.review-card h4 { font-size:12px; text-transform:uppercase; color:var(--text-secondary); margin-bottom:8px; letter-spacing:0.5px; }
-.review-card .value { font-size:16px; font-weight:600; }
+.review-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(220px,1fr)); gap:8px; margin-bottom:12px; }
+.review-card { background:var(--bg-card); border:2px inset #ffffff; padding:10px; }
+.review-card h4 { font-size:12px; text-transform:uppercase; color:#333; margin-bottom:4px; font-weight:bold; }
+.review-card .value { font-size:13px; font-weight:bold; }
 
 /* Progress */
-.progress-area { margin-top:24px; }
-.progress-bar { height:8px; background:var(--border); border-radius:4px; overflow:hidden; margin-bottom:12px; }
-.progress-fill { height:100%; background:linear-gradient(90deg, var(--accent), var(--success)); border-radius:4px; transition:width 0.3s ease; width:0%; }
-.progress-status { font-size:14px; color:var(--text-secondary); margin-bottom:8px; }
-.progress-log { background:var(--bg-input); border:1px solid var(--border); border-radius:6px; padding:12px; max-height:200px; overflow-y:auto; font-family:'SF Mono',Monaco,monospace; font-size:12px; line-height:1.8; color:var(--text-secondary); }
+.progress-area { margin-top:12px; }
+.progress-bar { height:20px; background:#ffffff; border:2px inset #ffffff; overflow:hidden; margin-bottom:8px; }
+.progress-fill { height:100%; background:var(--cyan); transition:width 0.3s ease; width:0%; }
+@keyframes shimmer { 0%{} 100%{} }
+.progress-status { font-size:12px; color:#000; margin-bottom:6px; font-weight:bold; }
+.progress-log { background:#ffffff; border:2px inset #ffffff; padding:8px; max-height:180px; overflow-y:auto; font-family:var(--font-mono); font-size:12px; line-height:1.6; color:#000; }
 .log-entry { padding:2px 0; }
-.log-entry.success { color:var(--success); }
-.log-entry.error { color:var(--error); }
-.log-entry.warning { color:var(--warning); }
+.log-entry.success { color:#006600; font-weight:bold; }
+.log-entry.error { color:#CC0000; font-weight:bold; }
+.log-entry.warning { color:#996600; font-weight:bold; }
 
 /* Metrics */
-.metrics-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:24px; }
-.metric-card { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius); padding:20px; border-left:4px solid var(--border); }
-.metric-card.blue { border-left-color:var(--accent); }
-.metric-card.green { border-left-color:var(--success); }
-.metric-card.red { border-left-color:var(--error); }
-.metric-card.orange { border-left-color:var(--orange); }
-.metric-card .metric-value { font-size:32px; font-weight:700; }
-.metric-card .metric-label { font-size:13px; color:var(--text-secondary); margin-top:4px; }
-.metric-card .metric-pct { font-size:14px; color:var(--text-secondary); }
+.metrics-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:12px; }
+.metric-card { background:var(--bg-card); border:2px outset #ffffff; padding:12px; border-left:6px solid #808080; position:relative; }
+.metric-card.blue { border-left-color:var(--cyan); background:#e0f7ff; }
+.metric-card.green { border-left-color:var(--cyan); background:#e0f7ff; }
+.metric-card.red { border-left-color:var(--magenta); background:#ffe0f0; }
+.metric-card.orange { border-left-color:var(--magenta); background:#ffe0f0; }
+.metric-card .metric-value { font-size:28px; font-weight:bold; }
+.metric-card .metric-label { font-size:12px; color:#333; margin-top:2px; font-weight:bold; }
+.metric-card .metric-pct { font-size:12px; color:#333; }
 
 /* Breakdown */
 .breakdown-list { list-style:none; }
-.breakdown-item { display:flex; justify-content:space-between; align-items:center; padding:10px 16px; border-bottom:1px solid var(--border); }
+.breakdown-item { display:flex; justify-content:space-between; align-items:center; padding:6px 10px; border-bottom:1px solid #808080; }
+.breakdown-item:hover { background:#ffffff; }
 .breakdown-item:last-child { border-bottom:none; }
-.breakdown-item .label { font-size:14px; }
-.badge { padding:2px 10px; border-radius:12px; font-size:12px; font-weight:600; }
-.badge-red { background:rgba(248,81,73,0.15); color:var(--error); }
-.badge-green { background:rgba(63,185,80,0.15); color:var(--success); }
-.badge-yellow { background:rgba(210,153,34,0.15); color:var(--warning); }
-.badge-blue { background:rgba(88,166,255,0.15); color:var(--accent); }
-.badge-orange { background:rgba(227,135,45,0.15); color:var(--orange); }
+.breakdown-item .label { font-size:12px; font-weight:bold; }
+.badge { padding:2px 8px; border-radius:0; font-size:12px; font-weight:bold; border:1px solid #000; }
+.badge-red { background:#f9c; color:#000; }
+.badge-green { background:#9ef; color:#000; }
+.badge-yellow { background:#ffa; color:#000; }
+.badge-blue { background:#9ef; color:#000; }
+.badge-orange { background:#ffa; color:#000; }
 
 /* Collapsible */
-.collapsible { margin-bottom:8px; }
-.collapsible-header { display:flex; justify-content:space-between; align-items:center; padding:12px 16px; background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius); cursor:pointer; transition:var(--transition); }
-.collapsible-header:hover { border-color:var(--accent); }
-.collapsible-header .arrow { transition:transform 0.3s; }
+.collapsible { margin-bottom:4px; }
+.collapsible-header { display:flex; justify-content:space-between; align-items:center; padding:6px 10px; background:var(--bg-card); border:2px outset #ffffff; cursor:pointer; font-weight:bold; font-size:12px; }
+.collapsible-header:hover { background:#ffffff; }
+.collapsible-header:active { border-style:inset; }
+.collapsible-header .arrow { transition:transform 0.1s; font-size:12px; }
 .collapsible-header.open .arrow { transform:rotate(90deg); }
-.collapsible-body { display:none; padding:16px; border:1px solid var(--border); border-top:none; border-radius:0 0 var(--radius) var(--radius); max-height:300px; overflow:auto; }
+.collapsible-body { display:none; padding:8px; border:2px inset #ffffff; max-height:280px; overflow:auto; background:#ffffff; }
 .collapsible-body.open { display:block; }
 
 /* Result Table */
-.result-table { width:100%; border-collapse:collapse; font-size:12px; }
-.result-table th { background:var(--gradient-start); padding:8px; text-align:left; position:sticky; top:0; font-size:11px; text-transform:uppercase; letter-spacing:0.3px; white-space:nowrap; }
-.result-table td { padding:6px 8px; border-top:1px solid var(--border); }
-.result-table tr:nth-child(even) td { background:rgba(255,255,255,0.02); }
-td.match { color:var(--success); }
-td.mismatch { color:var(--error); }
-td.warning { color:var(--warning); }
+.result-table { width:100%; border-collapse:collapse; font-size:12px; font-family:var(--font); border:1px solid #000; }
+.result-table th { background:var(--cyan); padding:4px 6px; text-align:left; position:sticky; top:0; font-size:12px; text-transform:uppercase; font-weight:bold; white-space:nowrap; color:#000; border:1px solid #000; }
+.result-table td { padding:3px 6px; border:1px solid #808080; }
+.result-table tr:nth-child(even) td { background:#e8e8e8; }
+.result-table tr:hover td { background:var(--yellow); }
+td.match { color:#000; font-weight:bold; background:#e0f7ff; }
+td.mismatch { color:#fff; font-weight:bold; background:var(--magenta); }
+td.warning { color:#000; font-weight:bold; background:var(--yellow); }
 
 /* Modal */
-.modal-overlay { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); z-index:1000; align-items:center; justify-content:center; }
+.modal-overlay { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1000; align-items:center; justify-content:center; }
 .modal-overlay.open { display:flex; }
-.modal { background:var(--bg-card); border:1px solid var(--border); border-radius:12px; max-width:700px; width:90%; max-height:80vh; overflow-y:auto; padding:32px; }
-.modal h2 { margin-bottom:20px; }
-.modal h3 { margin-top:16px; margin-bottom:8px; color:var(--accent); font-size:16px; }
-.modal p, .modal li { color:var(--text-secondary); font-size:14px; line-height:1.7; }
-.modal ul { padding-left:20px; margin-bottom:12px; }
-.modal-close { position:absolute; top:16px; right:16px; background:none; border:none; color:var(--text-secondary); font-size:24px; cursor:pointer; }
-.modal-close:hover { color:var(--text-primary); }
+.modal { background:var(--bg-card); border:2px outset #ffffff; max-width:600px; width:90%; max-height:80vh; overflow-y:auto; padding:16px; }
+.modal h2 { margin-bottom:12px; font-weight:bold; font-size:16px; }
+.modal h3 { margin-top:12px; margin-bottom:4px; color:#000; font-size:13px; font-weight:bold; }
+.modal p, .modal li { color:#333; font-size:12px; line-height:1.6; }
+.modal ul { padding-left:18px; margin-bottom:8px; }
+.modal-close { position:absolute; top:8px; right:8px; background:var(--bg-card); border:2px outset #ffffff; color:#000; font-size:16px; cursor:pointer; width:24px; height:24px; border-radius:0; display:flex; align-items:center; justify-content:center; }
+.modal-close:hover { background:var(--magenta); color:#fff; }
+.modal-close:active { border-style:inset; }
 
 /* Toast */
-#toast-container { position:fixed; top:20px; right:20px; z-index:2000; display:flex; flex-direction:column; gap:8px; }
-.toast { padding:12px 20px; border-radius:var(--radius); font-size:13px; animation:slideIn 0.3s ease; min-width:280px; display:flex; align-items:center; gap:8px; border:1px solid; }
-.toast-success { background:rgba(63,185,80,0.15); border-color:var(--success); color:var(--success); }
-.toast-error { background:rgba(248,81,73,0.15); border-color:var(--error); color:var(--error); }
-.toast-warning { background:rgba(210,153,34,0.15); border-color:var(--warning); color:var(--warning); }
-@keyframes slideIn { from{transform:translateX(100%);opacity:0} to{transform:translateX(0);opacity:1} }
+#toast-container { position:fixed; top:8px; right:8px; z-index:2000; display:flex; flex-direction:column; gap:4px; }
+.toast { padding:8px 14px; font-size:12px; font-weight:bold; animation:slideIn 0.2s ease; min-width:260px; display:flex; align-items:center; gap:6px; border:2px outset #ffffff; }
+.toast-success { background:var(--cyan); color:#000; }
+.toast-error { background:var(--magenta); color:#fff; }
+.toast-warning { background:var(--yellow); color:#000; }
+@keyframes slideIn { from{transform:translateX(100%)} to{transform:translateX(0)} }
 
 /* Scrollbar */
-::-webkit-scrollbar { width:8px; height:8px; }
-::-webkit-scrollbar-track { background:var(--bg-page); }
-::-webkit-scrollbar-thumb { background:var(--border); border-radius:4px; }
-::-webkit-scrollbar-thumb:hover { background:#444c56; }
+::-webkit-scrollbar { width:16px; height:16px; }
+::-webkit-scrollbar-track { background:var(--bg-card); border:1px solid #808080; }
+::-webkit-scrollbar-thumb { background:#808080; border:2px outset #c0c0c0; }
+::-webkit-scrollbar-thumb:hover { background:#666; }
 
 /* Responsive */
 @media(max-width:900px) {
@@ -194,11 +246,11 @@ td.warning { color:var(--warning); }
 }
 
 /* Pulse animation for run button */
-@keyframes pulse { 0%{box-shadow:0 0 0 0 rgba(88,166,255,0.4)} 70%{box-shadow:0 0 0 15px rgba(88,166,255,0)} 100%{box-shadow:0 0 0 0 rgba(88,166,255,0)} }
+@keyframes pulse { 0%{outline:3px solid var(--cyan)} 33%{outline:3px solid var(--magenta)} 66%{outline:3px solid var(--yellow)} 100%{outline:3px solid var(--cyan)} }
 .btn-pulse { animation: pulse 2s infinite; }
 
-.warning-box { background:rgba(210,153,34,0.1); border:1px solid var(--warning); border-radius:var(--radius); padding:12px 16px; margin-top:16px; color:var(--warning); font-size:13px; }
-.info-box { background:rgba(88,166,255,0.08); border:1px solid rgba(88,166,255,0.3); border-radius:var(--radius); padding:12px 16px; margin-bottom:16px; color:var(--text-secondary); font-size:13px; }
+.warning-box { background:var(--yellow); border:2px solid #000; padding:8px 10px; margin-top:8px; color:#000; font-size:12px; font-weight:bold; line-height:1.4; }
+.info-box { background:#e0f7ff; border:2px solid var(--cyan); padding:8px 10px; margin-bottom:10px; color:#000; font-size:12px; line-height:1.4; }
 .hidden { display:none !important; }
 .text-center { text-align:center; }
 .mt-16 { margin-top:16px; }
@@ -210,42 +262,42 @@ td.warning { color:var(--warning); }
   <!-- Header -->
   <div class="header">
     <div><h1>BOM Audit Tool</h1><p>Comprehensive Bill of Materials Comparison &amp; Analysis</p></div>
-    <button class="info-btn" onclick="toggleModal()" title="How It Works">ℹ</button>
+    <button class="info-btn" onclick="toggleModal()" title="How It Works"><span class="pxl-xs">ℹ</span></button>
   </div>
 
   <!-- Step Indicator -->
   <div class="step-indicator" id="step-indicator">
-    <div class="step-wrapper"><div class="step-circle active" data-step="1">1</div><div class="step-label active">Configure</div></div>
+    <div class="step-wrapper"><div class="step-circle active" data-step="1">1</div><div class="step-label active" data-steplabel="1">Configure</div></div>
     <div class="step-line" data-line="1"></div>
-    <div class="step-wrapper"><div class="step-circle" data-step="2">2</div><div class="step-label">Upload</div></div>
+    <div class="step-wrapper"><div class="step-circle" data-step="2">2</div><div class="step-label" data-steplabel="2">Upload</div></div>
     <div class="step-line" data-line="2"></div>
-    <div class="step-wrapper"><div class="step-circle" data-step="3">3</div><div class="step-label">Map Columns</div></div>
+    <div class="step-wrapper"><div class="step-circle" data-step="3">3</div><div class="step-label" data-steplabel="3">Map Columns</div></div>
     <div class="step-line" data-line="3"></div>
-    <div class="step-wrapper"><div class="step-circle" data-step="4">4</div><div class="step-label">Review &amp; Run</div></div>
+    <div class="step-wrapper"><div class="step-circle" data-step="4">4</div><div class="step-label" data-steplabel="4">Review &amp; Run</div></div>
     <div class="step-line" data-line="4"></div>
-    <div class="step-wrapper"><div class="step-circle" data-step="5">5</div><div class="step-label">Results</div></div>
+    <div class="step-wrapper"><div class="step-circle" data-step="5">5</div><div class="step-label" data-steplabel="5">Results</div></div>
   </div>
 
   <!-- Step 1: Configure -->
   <div class="step-panel active" id="step-1">
     <div class="card">
-      <h2>⚙️ Audit Configuration</h2>
+      <h2><span class="pxl-xs">⚙️</span> Audit Configuration</h2>
       <p class="subtitle">Select audit type and enter project metadata</p>
       <div class="audit-type-cards" style="grid-template-columns:1fr 1fr 1fr">
         <div class="audit-card" id="ee-card" onclick="selectAuditType('EE')">
-          <div class="icon">⚡</div>
+          <div class="icon"><span class="pxl">⚡</span></div>
           <h3>EE Audit</h3>
           <p>Electrical &amp; Electronic Components — Capacitors, Resistors, ICs, Connectors, Diodes, Crystals, etc.</p>
           <input type="radio" name="auditType" value="EE" style="display:none">
         </div>
         <div class="audit-card" id="pd-card" onclick="selectAuditType('PD')">
-          <div class="icon">🔧</div>
+          <div class="icon"><span class="pxl">🔧</span></div>
           <h3>PD Audit</h3>
           <p>Physical &amp; Mechanical Components — Screws, Gaskets, Adhesives, Labels, Cables, Enclosures, etc.</p>
           <input type="radio" name="auditType" value="PD" style="display:none">
         </div>
         <div class="audit-card" id="full-card" onclick="selectAuditType('FULL')">
-          <div class="icon">🔍</div>
+          <div class="icon"><span class="pxl">🔍</span></div>
           <h3>Full Comprehensive Audit</h3>
           <p>ALL Components — Combines EE &amp; PD scopes. Shows every difference between the two BOMs.</p>
           <input type="radio" name="auditType" value="FULL" style="display:none">
@@ -265,13 +317,13 @@ td.warning { color:var(--warning); }
   <!-- Step 2: Upload -->
   <div class="step-panel" id="step-2">
     <div class="card">
-      <h2>📁 Upload BOM Files</h2>
+      <h2>Upload BOM Files</h2>
       <p class="subtitle">Upload both BOMs as CSV files</p>
       <div class="upload-zones">
         <div class="upload-zone" id="arena-upload-zone" onclick="document.getElementById('arena-file-input').click()" ondragover="handleDragOver(event, this)" ondragleave="handleDragLeave(event, this)" ondrop="handleDrop(event, 'arena')">
           <input type="file" id="arena-file-input" accept=".csv" style="display:none" onchange="handleFileSelect(event, 'arena')">
           <div id="arena-upload-content">
-            <div class="uz-icon">📄</div>
+            <div class="uz-icon"><span class="pxl-sm">📄</span></div>
             <h3 id="arena-upload-title">Arena BOM</h3>
             <p>Drag &amp; drop CSV file here or click to browse</p>
           </div>
@@ -280,7 +332,7 @@ td.warning { color:var(--warning); }
         <div class="upload-zone" id="cm-upload-zone" onclick="document.getElementById('cm-file-input').click()" ondragover="handleDragOver(event, this)" ondragleave="handleDragLeave(event, this)" ondrop="handleDrop(event, 'cm')">
           <input type="file" id="cm-file-input" accept=".csv" style="display:none" onchange="handleFileSelect(event, 'cm')">
           <div id="cm-upload-content">
-            <div class="uz-icon">📄</div>
+            <div class="uz-icon"><span class="pxl-sm">📄</span></div>
             <h3 id="cm-upload-title">CM BOM</h3>
             <p>Drag &amp; drop CSV file here or click to browse</p>
           </div>
@@ -290,7 +342,7 @@ td.warning { color:var(--warning); }
       <div id="upload-warnings"></div>
     </div>
     <div class="card hidden" id="metadata-confirm-card">
-      <h2>📋 Confirm Project Metadata</h2>
+      <h2>Confirm Project Metadata</h2>
       <p class="subtitle">Auto-detected from the root item in your BOMs. Please verify and fill in any missing fields.</p>
       <div id="inferred-info" class="info-box" style="margin-bottom:16px"></div>
       <div class="form-grid">
@@ -310,7 +362,7 @@ td.warning { color:var(--warning); }
   <!-- Step 3: Column Mapping -->
   <div class="step-panel" id="step-3">
     <div class="card">
-      <h2>🔗 Column Mapping</h2>
+      <h2>Column Mapping</h2>
       <p class="subtitle">Verify and adjust the auto-detected column mappings</p>
       <div class="info-box">Columns are auto-mapped based on header names and data patterns. Adjust if needed.</div>
       <div class="mapping-container">
@@ -335,11 +387,11 @@ td.warning { color:var(--warning); }
   <!-- Step 4: Review & Run -->
   <div class="step-panel" id="step-4">
     <div class="card">
-      <h2>▶️ Review &amp; Run Audit</h2>
+      <h2>Review &amp; Run Audit</h2>
       <p class="subtitle">Verify configuration and start the audit</p>
       <div class="review-grid" id="review-grid"></div>
       <div class="text-center mt-16">
-        <button class="btn btn-primary btn-lg btn-pulse" id="run-audit-btn" onclick="runAudit()">🚀 Run Audit</button>
+        <button class="btn btn-primary btn-lg btn-pulse" id="run-audit-btn" onclick="runAudit()"><span class="pxl-xs">🚀</span> Run Audit</button>
       </div>
       <div class="progress-area hidden" id="progress-area">
         <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
@@ -353,7 +405,7 @@ td.warning { color:var(--warning); }
   <!-- Step 5: Results -->
   <div class="step-panel" id="step-5">
     <div class="card">
-      <h2>📊 Audit Results</h2>
+      <h2>Audit Results</h2>
       <p class="subtitle" id="results-subtitle"></p>
       <div class="metrics-grid" id="metrics-grid"></div>
     </div>
@@ -366,11 +418,11 @@ td.warning { color:var(--warning); }
       <div id="tab-previews"></div>
     </div>
     <div class="text-center mt-16 mb-16">
-      <button class="btn btn-success btn-lg" id="download-btn" onclick="downloadReport()">📥 Download XLSX Report</button>
+      <button class="btn btn-success btn-lg" id="download-btn" onclick="downloadReport()">Download XLSX Report</button>
       <p style="color:var(--text-secondary);font-size:12px;margin-top:8px" id="filename-preview"></p>
     </div>
     <div class="text-center mb-16">
-      <button class="btn btn-secondary" onclick="resetAudit()">🔄 Start New Audit</button>
+      <button class="btn btn-secondary" onclick="resetAudit()">Start New Audit</button>
     </div>
   </div>
 </div>
@@ -379,7 +431,7 @@ td.warning { color:var(--warning); }
 <div class="modal-overlay" id="info-modal">
   <div class="modal" style="position:relative">
     <button class="modal-close" onclick="toggleModal()">×</button>
-    <h2>ℹ️ How It Works</h2>
+    <h2><span class="pxl-xs">ℹ️</span> How It Works</h2>
     <h3>Audit Types</h3>
     <p><strong>EE Audit</strong> — Compares electrical/electronic components (capacitors, resistors, ICs, etc.) including reference designator analysis.</p>
     <p><strong>PD Audit</strong> — Compares physical/mechanical components (screws, gaskets, labels, etc.) with quantity aggregation across duplicates.</p>
@@ -569,7 +621,7 @@ function goToStep(step) {
   document.querySelectorAll('.step-circle').forEach(c => {
     const s = parseInt(c.dataset.step);
     c.classList.remove('active', 'completed');
-    if (s < step) { c.classList.add('completed'); c.textContent = '✓'; }
+    if (s < step) { c.classList.add('completed'); c.textContent = 'OK'; }
     else if (s === step) { c.classList.add('active'); c.textContent = s; }
     else { c.textContent = s; }
   });
@@ -667,6 +719,10 @@ function processFile(file, which) {
     showToast('Please upload a CSV file', 'error');
     return;
   }
+  // Show Win98 hourglass loading state
+  const content = document.getElementById(which + '-upload-content');
+  const bomLabel = which === 'arena' ? state.bomAName : state.bomBName;
+  content.innerHTML = '<div class="win98-loading"><div class="hourglass">⌛</div><div class="loading-text">Loading ' + bomLabel + '...</div></div>';
   Papa.parse(file, {
     header: false,
     skipEmptyLines: false,
@@ -697,7 +753,7 @@ function processFile(file, which) {
       zone.classList.add('has-file');
       const content = document.getElementById(which + '-upload-content');
       const bomLabel = which === 'arena' ? state.bomAName : state.bomBName;
-      content.innerHTML = '<div class="uz-icon">✅</div><h3>' + bomLabel + '</h3><p style="color:var(--success)">File loaded successfully</p>';
+      content.innerHTML = '<div class="uz-icon"><span class="pxl-sm">✅</span></div><h3>' + bomLabel + '</h3><p><b>File loaded successfully</b></p>';
 
       const info = document.getElementById(which + '-file-info');
       info.classList.remove('hidden');
@@ -712,7 +768,7 @@ function processFile(file, which) {
         const maxRows = Math.max(state.arenaData.length, state.cmData.length);
         const warnDiv = document.getElementById('upload-warnings');
         if (diff / maxRows > 0.5) {
-          warnDiv.innerHTML = '<div class="warning-box">⚠️ Warning: BOMs have significantly different item counts (' +
+          warnDiv.innerHTML = '<div class="warning-box"><span class="pxl-xs">⚠️</span> Warning: BOMs have significantly different item counts (' +
             state.arenaData.length + ' vs ' + state.cmData.length + ' rows, >' + Math.round(diff/maxRows*100) + '% difference). This may indicate structural differences.</div>';
         } else {
           warnDiv.innerHTML = '';
@@ -844,7 +900,7 @@ function setupColumnMapping() {
         } else if (val) {
           state.columnMap[which][field.key] = val;
           status.className = 'mapping-status mapped';
-          status.textContent = '✓';
+          status.textContent = 'OK';
         } else {
           delete state.columnMap[which][field.key];
           status.className = 'mapping-status unmapped';
@@ -856,7 +912,7 @@ function setupColumnMapping() {
       if (autoMap[field.key]) {
         state.columnMap[which][field.key] = autoMap[field.key];
         status.className = 'mapping-status mapped';
-        status.textContent = '✓';
+        status.textContent = 'OK';
       } else {
         status.className = 'mapping-status unmapped';
         status.textContent = '○';
@@ -1007,13 +1063,13 @@ function inferMetadata() {
   const infoEl = document.getElementById('inferred-info');
   let html = '';
   if (inferred.length) {
-    html += '<strong>✅ Auto-detected:</strong> ' + inferred.join(' · ');
+    html += '<strong><span class="pxl-xs">✅</span> Auto-detected:</strong> ' + inferred.join(' | ');
   }
   if (missing.length) {
-    if (html) html += '<br>';
-    html += '<strong style="color:var(--warning)">⚠️ Could not infer:</strong> ' + missing.join(', ') + ' — please fill in manually.';
+    if (html) html += '<br><br>';
+    html += '<strong><span class="pxl-xs">⚠️</span> Could not infer:</strong> ' + missing.join(', ') + ' -- please fill in manually.';
   }
-  if (!html) html = '✅ All metadata fields populated.';
+  if (!html) html = '<span class="pxl-xs">✅</span> All metadata fields populated.';
   infoEl.innerHTML = html;
 
   showToast('Metadata auto-detected from BOM root item. Please verify.', 'success');
@@ -1073,7 +1129,7 @@ function resetAudit() {
   ['arena','cm'].forEach(w => {
     const defaultName = w === 'arena' ? 'Arena BOM' : 'CM BOM';
     document.getElementById(w+'-upload-zone').classList.remove('has-file');
-    document.getElementById(w+'-upload-content').innerHTML = '<div class="uz-icon">📄</div><h3 id="'+w+'-upload-title">'+defaultName+'</h3><p>Drag & drop CSV file here or click to browse</p>';
+    document.getElementById(w+'-upload-content').innerHTML = '<div class="uz-icon"><span class="pxl-sm">📄</span></div><h3 id="'+w+'-upload-title">'+defaultName+'</h3><p>Drag & drop CSV file here or click to browse</p>';
     document.getElementById(w+'-file-info').classList.add('hidden');
     document.getElementById(w+'-file-info').innerHTML = '';
     document.getElementById(w+'-file-input').value = '';
@@ -1601,14 +1657,14 @@ function populateResults() {
   // Breakdown
   const items = [
     {label:'Item Name Mismatches', count:d.nameRev.filter(x=>x.discrepancyType==='Name'||x.discrepancyType==='Both').length, cls:'red'},
-    {label:'Revision Mismatches', count:d.nameRev.filter(x=>x.discrepancyType==='Revision'||x.discrepancyType==='Both').length, cls:'yellow'},
-    {label:'BOM Level Mismatches', count:d.level.length, cls:'yellow'},
+    {label:'Revision Mismatches', count:d.nameRev.filter(x=>x.discrepancyType==='Revision'||x.discrepancyType==='Both').length, cls:'red'},
+    {label:'BOM Level Mismatches', count:d.level.length, cls:'red'},
     {label:'Quantity Discrepancies', count:d.quantity.length, cls:'red'},
-    {label:'MPN/Manufacturer Mismatches', count:d.mpnMfr.length, cls:'orange'},
+    {label:'MPN/Manufacturer Mismatches', count:d.mpnMfr.length, cls:'red'},
   ];
-  if (includesRefDes()) items.push({label:'Reference Designator Issues', count:d.refDes.length, cls:'blue'});
-  items.push({label:'Missing from ' + state.bomBName, count:d.missingInCM.length, cls:'orange'});
-  items.push({label:'Missing from ' + state.bomAName, count:d.missingInArena.length, cls:'orange'});
+  if (includesRefDes()) items.push({label:'Reference Designator Issues', count:d.refDes.length, cls:'red'});
+  items.push({label:'Missing from ' + state.bomBName, count:d.missingInCM.length, cls:'red'});
+  items.push({label:'Missing from ' + state.bomAName, count:d.missingInArena.length, cls:'red'});
 
   document.getElementById('breakdown-list').innerHTML = items.map(i =>
     '<li class="breakdown-item"><span class="label">'+i.label+'</span><span class="badge badge-'+i.cls+'">'+i.count+'</span></li>'
@@ -1624,11 +1680,11 @@ function populateResults() {
     div.className = 'collapsible';
     const hdr = document.createElement('div');
     hdr.className = 'collapsible-header';
-    hdr.innerHTML = '<span>'+title+' <span class="badge badge-blue">'+rows.length+'</span></span><span class="arrow">▶</span>';
+    hdr.innerHTML = '<span>'+title+' <span class="badge badge-red">'+rows.length+'</span></span><span class="arrow">▶</span>';
     const body = document.createElement('div');
     body.className = 'collapsible-body';
     if (rows.length === 0) {
-      body.innerHTML = '<p style="color:var(--success)">✅ No discrepancies found</p>';
+      body.innerHTML = '<p><b><span class="pxl-xs">✅</span> No discrepancies found</b></p>';
     } else {
       let html = '<table class="result-table"><thead><tr>';
       headers.forEach(h => html += '<th>'+h+'</th>');
