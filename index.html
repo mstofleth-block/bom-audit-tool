@@ -414,7 +414,18 @@ td.warning { color:#000; font-weight:bold; background:var(--yellow); }
       <ul class="breakdown-list" id="breakdown-list"></ul>
     </div>
     <div class="card" id="tab-previews-card">
-      <h3 style="margin-bottom:16px">Detail Previews</h3>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <h3>Detail Previews</h3>
+        <label style="font-size:12px;font-weight:bold;display:flex;align-items:center;gap:6px">Rows per section:
+          <select id="preview-row-count" onchange="updatePreviewRows()" style="background:#fff;border:2px inset #ffffff;font-size:12px;font-family:var(--font);padding:2px 4px">
+            <option value="10">10</option>
+            <option value="25">25</option>
+            <option value="50" selected>50</option>
+            <option value="100">100</option>
+            <option value="999999">All</option>
+          </select>
+        </label>
+      </div>
       <div id="tab-previews"></div>
     </div>
     <div class="text-center mt-16 mb-16">
@@ -1674,8 +1685,13 @@ function populateResults() {
   const previews = document.getElementById('tab-previews');
   previews.innerHTML = '';
 
+  function getPreviewRowCount() {
+    const sel = document.getElementById('preview-row-count');
+    return sel ? parseInt(sel.value) : 50;
+  }
+
   function addPreview(title, headers, rows, maxRows) {
-    maxRows = maxRows || 10;
+    maxRows = maxRows || getPreviewRowCount();
     const div = document.createElement('div');
     div.className = 'collapsible';
     const hdr = document.createElement('div');
@@ -1748,6 +1764,10 @@ function populateResults() {
   const m = state.metadata;
   const fn = [localDateString(), getAuditLabel()+' Audit', m.assemblyNumber, m.assemblyName, m.program, m.cm, m.build].filter(Boolean).join(', ');
   document.getElementById('filename-preview').textContent = fn + '.xlsx';
+}
+
+function updatePreviewRows() {
+  if (state.results) populateResults();
 }
 
 // ============================================================
