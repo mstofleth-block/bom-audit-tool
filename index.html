@@ -1,0 +1,1720 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BOM Audit Tool</title>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<style>
+:root {
+  --bg-page: #0d1117; --bg-card: #161b22; --bg-input: #0d1117;
+  --border: #30363d; --border-focus: #58a6ff;
+  --accent: #58a6ff; --success: #3fb950; --error: #f85149; --warning: #d29922; --orange: #e3872d;
+  --text-primary: #e6edf3; --text-secondary: #8b949e;
+  --gradient-start: #1a1a2e; --gradient-end: #16213e;
+  --radius: 8px; --transition: 0.3s ease;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg-page); color: var(--text-primary); min-height:100vh; }
+.app { max-width:1200px; margin:0 auto; padding:20px; }
+
+/* Header */
+.header { background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end)); border-radius: var(--radius); padding:24px 32px; margin-bottom:24px; display:flex; justify-content:space-between; align-items:center; border:1px solid var(--border); }
+.header h1 { font-size:28px; font-weight:700; background: linear-gradient(90deg, #58a6ff, #a371f7); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+.header p { color: var(--text-secondary); margin-top:4px; font-size:14px; }
+.info-btn { background:none; border:1px solid var(--border); color:var(--text-secondary); width:36px; height:36px; border-radius:50%; cursor:pointer; font-size:18px; transition:var(--transition); }
+.info-btn:hover { border-color:var(--accent); color:var(--accent); }
+
+/* Step Indicator */
+.step-indicator { display:flex; justify-content:center; align-items:center; margin-bottom:32px; gap:0; }
+.step-item { display:flex; align-items:center; }
+.step-circle { width:40px; height:40px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:600; font-size:14px; border:2px solid var(--border); color:var(--text-secondary); background:var(--bg-card); transition:var(--transition); cursor:default; }
+.step-circle.active { border-color:var(--accent); color:var(--accent); background:rgba(88,166,255,0.1); box-shadow:0 0 12px rgba(88,166,255,0.3); }
+.step-circle.completed { border-color:var(--success); color:#fff; background:var(--success); }
+.step-label { position:absolute; top:48px; font-size:11px; color:var(--text-secondary); white-space:nowrap; text-align:center; }
+.step-label.active { color:var(--accent); }
+.step-wrapper { position:relative; display:flex; flex-direction:column; align-items:center; }
+.step-line { width:60px; height:2px; background:var(--border); margin:0 4px; }
+.step-line.completed { background:var(--success); }
+
+/* Panels */
+.step-panel { display:none; animation: fadeIn 0.3s ease; }
+.step-panel.active { display:block; }
+@keyframes fadeIn { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+
+/* Cards */
+.card { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius); padding:24px; margin-bottom:16px; }
+.card h2 { font-size:20px; margin-bottom:4px; }
+.card .subtitle { color:var(--text-secondary); font-size:14px; margin-bottom:20px; }
+
+/* Audit Type Cards */
+.audit-type-cards { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:24px; }
+.audit-card { background:var(--bg-card); border:2px solid var(--border); border-radius:var(--radius); padding:24px; cursor:pointer; transition:var(--transition); text-align:center; }
+.audit-card:hover { border-color:var(--accent); transform:translateY(-2px); }
+.audit-card.selected { border-color:var(--accent); background:rgba(88,166,255,0.05); box-shadow:0 0 20px rgba(88,166,255,0.15); }
+.audit-card .icon { font-size:48px; margin-bottom:12px; }
+.audit-card h3 { font-size:18px; margin-bottom:8px; }
+.audit-card p { color:var(--text-secondary); font-size:13px; line-height:1.5; }
+
+/* Form */
+.form-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+.form-group { display:flex; flex-direction:column; gap:6px; }
+.form-group label { font-size:13px; color:var(--text-secondary); font-weight:500; }
+.form-group input, .form-group select { background:var(--bg-input); border:1px solid var(--border); color:var(--text-primary); padding:10px 12px; border-radius:6px; font-size:14px; transition:var(--transition); }
+.form-group input:focus, .form-group select:focus { outline:none; border-color:var(--accent); box-shadow:0 0 0 3px rgba(88,166,255,0.15); }
+.form-group select { cursor:pointer; }
+
+/* Upload Zones */
+.upload-zones { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+.upload-zone { border:2px dashed var(--border); border-radius:var(--radius); padding:32px; text-align:center; cursor:pointer; transition:var(--transition); background:var(--bg-card); min-height:200px; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+.upload-zone:hover, .upload-zone.dragover { border-color:var(--accent); background:rgba(88,166,255,0.03); }
+.upload-zone.has-file { border-color:var(--success); border-style:solid; }
+.upload-zone .uz-icon { font-size:40px; margin-bottom:12px; }
+.upload-zone h3 { margin-bottom:8px; font-size:16px; }
+.upload-zone p { color:var(--text-secondary); font-size:13px; }
+.file-info { margin-top:12px; padding:12px; background:rgba(63,185,80,0.1); border-radius:6px; text-align:left; width:100%; }
+.file-info .fi-name { font-weight:600; color:var(--success); }
+.file-info .fi-detail { font-size:12px; color:var(--text-secondary); margin-top:4px; }
+
+
+
+/* Column Mapping */
+.mapping-container { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+.mapping-panel { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius); padding:20px; }
+.mapping-panel h3 { font-size:16px; margin-bottom:16px; padding-bottom:8px; border-bottom:1px solid var(--border); }
+.mapping-row { display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+.mapping-row label { width:140px; font-size:13px; color:var(--text-secondary); flex-shrink:0; }
+.mapping-row select { flex:1; background:var(--bg-input); border:1px solid var(--border); color:var(--text-primary); padding:8px; border-radius:6px; font-size:13px; }
+.mapping-status { width:24px; height:24px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:14px; flex-shrink:0; }
+.mapping-status.mapped { color:var(--success); }
+.mapping-status.unmapped { color:var(--warning); }
+.mapping-status.na { color:var(--text-secondary); font-weight:700; }
+
+/* Buttons */
+.btn { padding:10px 24px; border-radius:6px; font-size:14px; font-weight:600; cursor:pointer; border:none; transition:var(--transition); display:inline-flex; align-items:center; gap:8px; }
+.btn-primary { background:var(--accent); color:#fff; }
+.btn-primary:hover { background:#4090e0; }
+.btn-primary:disabled { opacity:0.5; cursor:not-allowed; }
+.btn-success { background:var(--success); color:#fff; }
+.btn-success:hover { background:#36a346; }
+.btn-secondary { background:var(--border); color:var(--text-primary); }
+.btn-secondary:hover { background:#444c56; }
+.btn-danger { background:var(--error); color:#fff; }
+.btn-lg { padding:14px 36px; font-size:16px; }
+.nav-buttons { display:flex; justify-content:space-between; margin-top:24px; }
+
+/* Review Grid */
+.review-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(250px,1fr)); gap:16px; margin-bottom:24px; }
+.review-card { background:var(--bg-input); border:1px solid var(--border); border-radius:var(--radius); padding:16px; }
+.review-card h4 { font-size:12px; text-transform:uppercase; color:var(--text-secondary); margin-bottom:8px; letter-spacing:0.5px; }
+.review-card .value { font-size:16px; font-weight:600; }
+
+/* Progress */
+.progress-area { margin-top:24px; }
+.progress-bar { height:8px; background:var(--border); border-radius:4px; overflow:hidden; margin-bottom:12px; }
+.progress-fill { height:100%; background:linear-gradient(90deg, var(--accent), var(--success)); border-radius:4px; transition:width 0.3s ease; width:0%; }
+.progress-status { font-size:14px; color:var(--text-secondary); margin-bottom:8px; }
+.progress-log { background:var(--bg-input); border:1px solid var(--border); border-radius:6px; padding:12px; max-height:200px; overflow-y:auto; font-family:'SF Mono',Monaco,monospace; font-size:12px; line-height:1.8; color:var(--text-secondary); }
+.log-entry { padding:2px 0; }
+.log-entry.success { color:var(--success); }
+.log-entry.error { color:var(--error); }
+.log-entry.warning { color:var(--warning); }
+
+/* Metrics */
+.metrics-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:24px; }
+.metric-card { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius); padding:20px; border-left:4px solid var(--border); }
+.metric-card.blue { border-left-color:var(--accent); }
+.metric-card.green { border-left-color:var(--success); }
+.metric-card.red { border-left-color:var(--error); }
+.metric-card.orange { border-left-color:var(--orange); }
+.metric-card .metric-value { font-size:32px; font-weight:700; }
+.metric-card .metric-label { font-size:13px; color:var(--text-secondary); margin-top:4px; }
+.metric-card .metric-pct { font-size:14px; color:var(--text-secondary); }
+
+/* Breakdown */
+.breakdown-list { list-style:none; }
+.breakdown-item { display:flex; justify-content:space-between; align-items:center; padding:10px 16px; border-bottom:1px solid var(--border); }
+.breakdown-item:last-child { border-bottom:none; }
+.breakdown-item .label { font-size:14px; }
+.badge { padding:2px 10px; border-radius:12px; font-size:12px; font-weight:600; }
+.badge-red { background:rgba(248,81,73,0.15); color:var(--error); }
+.badge-green { background:rgba(63,185,80,0.15); color:var(--success); }
+.badge-yellow { background:rgba(210,153,34,0.15); color:var(--warning); }
+.badge-blue { background:rgba(88,166,255,0.15); color:var(--accent); }
+.badge-orange { background:rgba(227,135,45,0.15); color:var(--orange); }
+
+/* Collapsible */
+.collapsible { margin-bottom:8px; }
+.collapsible-header { display:flex; justify-content:space-between; align-items:center; padding:12px 16px; background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius); cursor:pointer; transition:var(--transition); }
+.collapsible-header:hover { border-color:var(--accent); }
+.collapsible-header .arrow { transition:transform 0.3s; }
+.collapsible-header.open .arrow { transform:rotate(90deg); }
+.collapsible-body { display:none; padding:16px; border:1px solid var(--border); border-top:none; border-radius:0 0 var(--radius) var(--radius); max-height:300px; overflow:auto; }
+.collapsible-body.open { display:block; }
+
+/* Result Table */
+.result-table { width:100%; border-collapse:collapse; font-size:12px; }
+.result-table th { background:var(--gradient-start); padding:8px; text-align:left; position:sticky; top:0; font-size:11px; text-transform:uppercase; letter-spacing:0.3px; white-space:nowrap; }
+.result-table td { padding:6px 8px; border-top:1px solid var(--border); }
+.result-table tr:nth-child(even) td { background:rgba(255,255,255,0.02); }
+td.match { color:var(--success); }
+td.mismatch { color:var(--error); }
+td.warning { color:var(--warning); }
+
+/* Modal */
+.modal-overlay { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); z-index:1000; align-items:center; justify-content:center; }
+.modal-overlay.open { display:flex; }
+.modal { background:var(--bg-card); border:1px solid var(--border); border-radius:12px; max-width:700px; width:90%; max-height:80vh; overflow-y:auto; padding:32px; }
+.modal h2 { margin-bottom:20px; }
+.modal h3 { margin-top:16px; margin-bottom:8px; color:var(--accent); font-size:16px; }
+.modal p, .modal li { color:var(--text-secondary); font-size:14px; line-height:1.7; }
+.modal ul { padding-left:20px; margin-bottom:12px; }
+.modal-close { position:absolute; top:16px; right:16px; background:none; border:none; color:var(--text-secondary); font-size:24px; cursor:pointer; }
+.modal-close:hover { color:var(--text-primary); }
+
+/* Toast */
+#toast-container { position:fixed; top:20px; right:20px; z-index:2000; display:flex; flex-direction:column; gap:8px; }
+.toast { padding:12px 20px; border-radius:var(--radius); font-size:13px; animation:slideIn 0.3s ease; min-width:280px; display:flex; align-items:center; gap:8px; border:1px solid; }
+.toast-success { background:rgba(63,185,80,0.15); border-color:var(--success); color:var(--success); }
+.toast-error { background:rgba(248,81,73,0.15); border-color:var(--error); color:var(--error); }
+.toast-warning { background:rgba(210,153,34,0.15); border-color:var(--warning); color:var(--warning); }
+@keyframes slideIn { from{transform:translateX(100%);opacity:0} to{transform:translateX(0);opacity:1} }
+
+/* Scrollbar */
+::-webkit-scrollbar { width:8px; height:8px; }
+::-webkit-scrollbar-track { background:var(--bg-page); }
+::-webkit-scrollbar-thumb { background:var(--border); border-radius:4px; }
+::-webkit-scrollbar-thumb:hover { background:#444c56; }
+
+/* Responsive */
+@media(max-width:900px) {
+  .audit-type-cards { grid-template-columns:1fr !important; }
+  .upload-zones, .mapping-container, .form-grid, .metrics-grid { grid-template-columns:1fr; }
+}
+
+/* Pulse animation for run button */
+@keyframes pulse { 0%{box-shadow:0 0 0 0 rgba(88,166,255,0.4)} 70%{box-shadow:0 0 0 15px rgba(88,166,255,0)} 100%{box-shadow:0 0 0 0 rgba(88,166,255,0)} }
+.btn-pulse { animation: pulse 2s infinite; }
+
+.warning-box { background:rgba(210,153,34,0.1); border:1px solid var(--warning); border-radius:var(--radius); padding:12px 16px; margin-top:16px; color:var(--warning); font-size:13px; }
+.info-box { background:rgba(88,166,255,0.08); border:1px solid rgba(88,166,255,0.3); border-radius:var(--radius); padding:12px 16px; margin-bottom:16px; color:var(--text-secondary); font-size:13px; }
+.hidden { display:none !important; }
+.text-center { text-align:center; }
+.mt-16 { margin-top:16px; }
+.mb-16 { margin-bottom:16px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- Header -->
+  <div class="header">
+    <div><h1>BOM Audit Tool</h1><p>Comprehensive Bill of Materials Comparison &amp; Analysis</p></div>
+    <button class="info-btn" onclick="toggleModal()" title="How It Works">ℹ</button>
+  </div>
+
+  <!-- Step Indicator -->
+  <div class="step-indicator" id="step-indicator">
+    <div class="step-wrapper"><div class="step-circle active" data-step="1">1</div><div class="step-label active">Configure</div></div>
+    <div class="step-line" data-line="1"></div>
+    <div class="step-wrapper"><div class="step-circle" data-step="2">2</div><div class="step-label">Upload</div></div>
+    <div class="step-line" data-line="2"></div>
+    <div class="step-wrapper"><div class="step-circle" data-step="3">3</div><div class="step-label">Map Columns</div></div>
+    <div class="step-line" data-line="3"></div>
+    <div class="step-wrapper"><div class="step-circle" data-step="4">4</div><div class="step-label">Review &amp; Run</div></div>
+    <div class="step-line" data-line="4"></div>
+    <div class="step-wrapper"><div class="step-circle" data-step="5">5</div><div class="step-label">Results</div></div>
+  </div>
+
+  <!-- Step 1: Configure -->
+  <div class="step-panel active" id="step-1">
+    <div class="card">
+      <h2>⚙️ Audit Configuration</h2>
+      <p class="subtitle">Select audit type and enter project metadata</p>
+      <div class="audit-type-cards" style="grid-template-columns:1fr 1fr 1fr">
+        <div class="audit-card" id="ee-card" onclick="selectAuditType('EE')">
+          <div class="icon">⚡</div>
+          <h3>EE Audit</h3>
+          <p>Electrical &amp; Electronic Components — Capacitors, Resistors, ICs, Connectors, Diodes, Crystals, etc.</p>
+          <input type="radio" name="auditType" value="EE" style="display:none">
+        </div>
+        <div class="audit-card" id="pd-card" onclick="selectAuditType('PD')">
+          <div class="icon">🔧</div>
+          <h3>PD Audit</h3>
+          <p>Physical &amp; Mechanical Components — Screws, Gaskets, Adhesives, Labels, Cables, Enclosures, etc.</p>
+          <input type="radio" name="auditType" value="PD" style="display:none">
+        </div>
+        <div class="audit-card" id="full-card" onclick="selectAuditType('FULL')">
+          <div class="icon">🔍</div>
+          <h3>Full Comprehensive Audit</h3>
+          <p>ALL Components — Combines EE &amp; PD scopes. Shows every difference between the two BOMs.</p>
+          <input type="radio" name="auditType" value="FULL" style="display:none">
+        </div>
+      </div>
+      <h3 style="margin-top:20px;margin-bottom:12px;font-size:15px;color:var(--text-secondary)">BOM Labels</h3>
+      <div class="info-box">Name each BOM to distinguish them in the report. Defaults to "Arena BOM" and "CM BOM".</div>
+      <div class="form-grid" style="margin-bottom:20px">
+        <div class="form-group"><label>BOM A Name</label><input type="text" id="bomAName" placeholder="e.g., Arena BOM" value="Arena BOM"></div>
+        <div class="form-group"><label>BOM B Name</label><input type="text" id="bomBName" placeholder="e.g., CM BOM" value="CM BOM"></div>
+      </div>
+
+    </div>
+    <div class="nav-buttons"><div></div><button class="btn btn-primary" onclick="goToStep(2)">Next →</button></div>
+  </div>
+
+  <!-- Step 2: Upload -->
+  <div class="step-panel" id="step-2">
+    <div class="card">
+      <h2>📁 Upload BOM Files</h2>
+      <p class="subtitle">Upload both BOMs as CSV files</p>
+      <div class="upload-zones">
+        <div class="upload-zone" id="arena-upload-zone" onclick="document.getElementById('arena-file-input').click()" ondragover="handleDragOver(event, this)" ondragleave="handleDragLeave(event, this)" ondrop="handleDrop(event, 'arena')">
+          <input type="file" id="arena-file-input" accept=".csv" style="display:none" onchange="handleFileSelect(event, 'arena')">
+          <div id="arena-upload-content">
+            <div class="uz-icon">📄</div>
+            <h3 id="arena-upload-title">Arena BOM</h3>
+            <p>Drag &amp; drop CSV file here or click to browse</p>
+          </div>
+          <div id="arena-file-info" class="file-info hidden"></div>
+        </div>
+        <div class="upload-zone" id="cm-upload-zone" onclick="document.getElementById('cm-file-input').click()" ondragover="handleDragOver(event, this)" ondragleave="handleDragLeave(event, this)" ondrop="handleDrop(event, 'cm')">
+          <input type="file" id="cm-file-input" accept=".csv" style="display:none" onchange="handleFileSelect(event, 'cm')">
+          <div id="cm-upload-content">
+            <div class="uz-icon">📄</div>
+            <h3 id="cm-upload-title">CM BOM</h3>
+            <p>Drag &amp; drop CSV file here or click to browse</p>
+          </div>
+          <div id="cm-file-info" class="file-info hidden"></div>
+        </div>
+      </div>
+      <div id="upload-warnings"></div>
+    </div>
+    <div class="card hidden" id="metadata-confirm-card">
+      <h2>📋 Confirm Project Metadata</h2>
+      <p class="subtitle">Auto-detected from the root item in your BOMs. Please verify and fill in any missing fields.</p>
+      <div id="inferred-info" class="info-box" style="margin-bottom:16px"></div>
+      <div class="form-grid">
+        <div class="form-group"><label>Assembly Number</label><input type="text" id="assemblyNumber" placeholder="e.g., A-PRD-0155"></div>
+        <div class="form-group"><label>Assembly Name</label><input type="text" id="assemblyName" placeholder="e.g., General Assembly, S3a"></div>
+        <div class="form-group"><label>Program</label><input type="text" id="program" placeholder="e.g., S3a"></div>
+        <div class="form-group"><label>CM (Contract Manufacturer)</label><input type="text" id="cm" placeholder="e.g., Foxconn"></div>
+        <div class="form-group"><label>Build</label>
+          <select id="build" onchange="handleBuildChange()"><option value="">Select build...</option><option>EVT</option><option>DVT</option><option>PVT</option><option>MP</option><option>Proto</option><option value="Other">Other...</option></select>
+          <input type="text" id="buildOther" class="hidden" placeholder="Enter custom build name..." style="margin-top:6px">
+        </div>
+      </div>
+    </div>
+    <div class="nav-buttons"><button class="btn btn-secondary" onclick="goToStep(1)">← Back</button><button class="btn btn-primary" onclick="goToStep(3)">Next →</button></div>
+  </div>
+
+  <!-- Step 3: Column Mapping -->
+  <div class="step-panel" id="step-3">
+    <div class="card">
+      <h2>🔗 Column Mapping</h2>
+      <p class="subtitle">Verify and adjust the auto-detected column mappings</p>
+      <div class="info-box">Columns are auto-mapped based on header names and data patterns. Adjust if needed.</div>
+      <div class="mapping-container">
+        <div class="mapping-panel">
+          <h3 id="arena-mapping-title">Arena BOM Columns</h3>
+          <div id="arena-mappings"></div>
+        </div>
+        <div class="mapping-panel">
+          <h3 id="cm-mapping-title">CM BOM Columns</h3>
+          <div id="cm-mappings"></div>
+        </div>
+      </div>
+      <div class="mt-16">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--text-secondary)">
+          <input type="checkbox" id="multi-col-level" onchange="handleMultiColLevel()"> CM BOM has multi-column level structure (levels spread across adjacent columns)
+        </label>
+      </div>
+    </div>
+    <div class="nav-buttons"><button class="btn btn-secondary" onclick="goToStep(2)">← Back</button><button class="btn btn-primary" onclick="goToStep(4)">Next →</button></div>
+  </div>
+
+  <!-- Step 4: Review & Run -->
+  <div class="step-panel" id="step-4">
+    <div class="card">
+      <h2>▶️ Review &amp; Run Audit</h2>
+      <p class="subtitle">Verify configuration and start the audit</p>
+      <div class="review-grid" id="review-grid"></div>
+      <div class="text-center mt-16">
+        <button class="btn btn-primary btn-lg btn-pulse" id="run-audit-btn" onclick="runAudit()">🚀 Run Audit</button>
+      </div>
+      <div class="progress-area hidden" id="progress-area">
+        <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+        <div class="progress-status" id="progress-status">Initializing...</div>
+        <div class="progress-log" id="progress-log"></div>
+      </div>
+    </div>
+    <div class="nav-buttons"><button class="btn btn-secondary" id="back-btn-4" onclick="goToStep(3)">← Back</button><div></div></div>
+  </div>
+
+  <!-- Step 5: Results -->
+  <div class="step-panel" id="step-5">
+    <div class="card">
+      <h2>📊 Audit Results</h2>
+      <p class="subtitle" id="results-subtitle"></p>
+      <div class="metrics-grid" id="metrics-grid"></div>
+    </div>
+    <div class="card">
+      <h3 style="margin-bottom:16px">Discrepancy Breakdown</h3>
+      <ul class="breakdown-list" id="breakdown-list"></ul>
+    </div>
+    <div class="card" id="tab-previews-card">
+      <h3 style="margin-bottom:16px">Detail Previews</h3>
+      <div id="tab-previews"></div>
+    </div>
+    <div class="text-center mt-16 mb-16">
+      <button class="btn btn-success btn-lg" id="download-btn" onclick="downloadReport()">📥 Download XLSX Report</button>
+      <p style="color:var(--text-secondary);font-size:12px;margin-top:8px" id="filename-preview"></p>
+    </div>
+    <div class="text-center mb-16">
+      <button class="btn btn-secondary" onclick="resetAudit()">🔄 Start New Audit</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal -->
+<div class="modal-overlay" id="info-modal">
+  <div class="modal" style="position:relative">
+    <button class="modal-close" onclick="toggleModal()">×</button>
+    <h2>ℹ️ How It Works</h2>
+    <h3>Audit Types</h3>
+    <p><strong>EE Audit</strong> — Compares electrical/electronic components (capacitors, resistors, ICs, etc.) including reference designator analysis.</p>
+    <p><strong>PD Audit</strong> — Compares physical/mechanical components (screws, gaskets, labels, etc.) with quantity aggregation across duplicates.</p>
+    <p><strong>Full Comprehensive Audit</strong> — Compares ALL components across both BOMs regardless of type. Combines EE strategies (ref des analysis for electrical items) with PD strategies (quantity aggregation for mechanical items). Shows every difference.</p>
+    <h3>Normalization Rules</h3>
+    <ul>
+      <li><strong>Item Numbers:</strong> Only the first 10 characters are compared (case insensitive)</li>
+      <li><strong>Revisions:</strong> Rightmost 2 chars, leading zeros and letters removed (e.g., "X03" → "3")</li>
+      <li><strong>BOM Levels:</strong> Normalized so root item = level 0</li>
+      <li><strong>Multi-column levels:</strong> CM BOMs with split level columns are merged automatically</li>
+    </ul>
+    <h3>Comparisons Performed</h3>
+    <ul>
+      <li>Item Number, Name &amp; Revision matching</li>
+      <li>BOM Level hierarchy comparison</li>
+      <li>Quantity/Usage verification</li>
+      <li>MPN &amp; Manufacturer sourcing comparison</li>
+      <li>Reference Designator analysis (EE only)</li>
+      <li>Missing items detection (both directions)</li>
+    </ul>
+    <h3>Output</h3>
+    <p>A multi-tab XLSX spreadsheet with discrepancies only — exact matches are excluded from detail tabs for clarity. Includes Table of Contents, Summary statistics, and the original BOMs.</p>
+  </div>
+</div>
+
+<!-- Toast Container -->
+<div id="toast-container"></div>
+
+<script>
+// ============================================================
+// BOM AUDIT TOOL - Complete JavaScript Engine
+// ============================================================
+
+// ---- Global State ----
+const state = {
+  auditType: null,
+  metadata: {},
+  bomAName: 'Arena BOM',
+  bomBName: 'CM BOM',
+  arenaData: null,
+  cmData: null,
+  arenaHeaders: [],
+  cmHeaders: [],
+  arenaRaw: [],
+  cmRaw: [],
+  columnMap: { arena: {}, cm: {} },
+  results: null,
+  workbook: null
+};
+
+// ---- Audit Prefixes ----
+const EE_PREFIXES = ['E-CBL','E-GCA','E-CAP','E-CRY','E-DIO','E-DIS','E-FER','E-FIL','E-FPC','E-FUS','E-ICS','E-MAG','E-PCB','E-GRE','E-RES','E-SCH','E-SWC','E-TOU','E-TRD','E-TRS','E-LED','E-CON','E-IND','E-BAT'];
+const PD_PREFIXES = ['M-ADH','M-FMT','M-MLD','M-SCR','M-GAS','M-TAP','M-GLU','M-SPR','M-MIS','M-DWL','M-NUT','M-LAB','M-AUD','M-BAG','M-CBL','M-FOT','M-FIX','M-ORN','M-PIN','M-PRD','M-RRN','M-SHD','M-SPK','M-TOL','M-TUB','M-WAS','E-ANT','E-MAG','E-FER','E-CON','D-ART','D-PCD','D-SPC','A-CBL','A-DOC','A-FPC','A-HNK','A-PCB','A-PRD','A-SUB'];
+
+// Combined prefixes for Full audit (deduplicated union of EE + PD)
+const FULL_PREFIXES = [...new Set([...EE_PREFIXES, ...PD_PREFIXES])];
+
+function getPrefixes() {
+  if (state.auditType === 'EE') return EE_PREFIXES;
+  if (state.auditType === 'PD') return PD_PREFIXES;
+  return FULL_PREFIXES; // FULL
+}
+
+function matchesAuditType(itemNumber) {
+  if (!itemNumber) return false;
+  if (state.auditType === 'FULL') return true; // Full audit includes ALL items
+  const upper = itemNumber.toUpperCase().trim();
+  return getPrefixes().some(p => upper.startsWith(p));
+}
+
+function isEEItem(itemNumber) {
+  if (!itemNumber) return false;
+  const upper = itemNumber.toUpperCase().trim();
+  return EE_PREFIXES.some(p => upper.startsWith(p));
+}
+
+function includesRefDes() {
+  return state.auditType === 'EE' || state.auditType === 'FULL';
+}
+
+function getAuditLabel() {
+  if (state.auditType === 'EE') return 'EE';
+  if (state.auditType === 'PD') return 'PD';
+  return 'Full Comprehensive';
+}
+
+// ---- Utility Functions ----
+function showToast(msg, type='success') {
+  const c = document.getElementById('toast-container');
+  const t = document.createElement('div');
+  t.className = 'toast toast-' + type;
+  t.textContent = msg;
+  c.appendChild(t);
+  setTimeout(() => { t.style.opacity='0'; t.style.transition='opacity 0.3s'; setTimeout(() => t.remove(), 300); }, 4000);
+}
+
+function localDateString() {
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return yyyy + '-' + mm + '-' + dd;
+}
+
+function similarity(s1, s2) {
+  s1 = (s1 || '').toLowerCase().trim();
+  s2 = (s2 || '').toLowerCase().trim();
+  if (s1 === s2) return 100;
+  if (!s1 || !s2) return 0;
+  const len1 = s1.length, len2 = s2.length;
+  const matrix = [];
+  for (let i = 0; i <= len1; i++) matrix[i] = [i];
+  for (let j = 0; j <= len2; j++) matrix[0][j] = j;
+  for (let i = 1; i <= len1; i++) {
+    for (let j = 1; j <= len2; j++) {
+      const cost = s1[i-1] === s2[j-1] ? 0 : 1;
+      matrix[i][j] = Math.min(matrix[i-1][j]+1, matrix[i][j-1]+1, matrix[i-1][j-1]+cost);
+    }
+  }
+  return Math.round((1 - matrix[len1][len2] / Math.max(len1, len2)) * 100);
+}
+
+function normalizeItemNumber(val) {
+  if (!val) return '';
+  return val.toString().trim().substring(0, 10).toUpperCase();
+}
+
+function normalizeRevision(val) {
+  if (!val && val !== 0) return '';
+  let s = val.toString().trim();
+  if (s.length === 0) return '';
+  if (s.length > 2) s = s.slice(-2);
+  // Remove leading zeros
+  s = s.replace(/^0+/, '') || '0';
+  // Remove leading letters if followed by digit(s)
+  const m = s.match(/^[A-Za-z]+([0-9]+)$/);
+  if (m) s = m[1].replace(/^0+/, '') || '0';
+  if (s === '0' && val.toString().trim() !== '0') {
+    // If original was purely alphabetic, keep it
+    const orig = val.toString().trim();
+    if (orig.length > 2) {
+      const last2 = orig.slice(-2);
+      if (/^[A-Za-z]+$/.test(last2)) return last2.toUpperCase();
+    }
+    if (/^[A-Za-z]+$/.test(orig)) return orig.toUpperCase();
+  }
+  return s;
+}
+
+function normalizeLevel(val, rootLevel) {
+  const n = parseFloat(val);
+  if (isNaN(n)) return null;
+  return n - rootLevel;
+}
+
+function parseRefDes(val) {
+  if (!val) return [];
+  const s = val.toString().trim();
+  if (!s) return [];
+  // Check for ranges like R1-R10
+  const parts = s.split(',').map(p => p.trim()).filter(Boolean);
+  return parts;
+}
+
+function hasRange(val) {
+  if (!val) return false;
+  const parts = val.toString().split(',').map(p => p.trim());
+  return parts.some(p => /^[A-Za-z]+\d+\s*-\s*[A-Za-z]+\d+$/.test(p));
+}
+
+function parseQuantity(val) {
+  if (!val && val !== 0) return 0;
+  const s = val.toString().trim();
+  const n = parseFloat(s);
+  return isNaN(n) ? 0 : n;
+}
+
+// ---- Step Navigation ----
+let currentStep = 1;
+
+function goToStep(step) {
+  // Validate before advancing
+  if (step > currentStep) {
+    if (!validateStep(currentStep)) return;
+  }
+  // Update step indicators
+  document.querySelectorAll('.step-circle').forEach(c => {
+    const s = parseInt(c.dataset.step);
+    c.classList.remove('active', 'completed');
+    if (s < step) { c.classList.add('completed'); c.textContent = '✓'; }
+    else if (s === step) { c.classList.add('active'); c.textContent = s; }
+    else { c.textContent = s; }
+  });
+  document.querySelectorAll('.step-label').forEach((l, i) => {
+    l.classList.toggle('active', i+1 === step);
+  });
+  document.querySelectorAll('.step-line').forEach((l, i) => {
+    l.classList.toggle('completed', i+1 < step);
+  });
+  // Show panel
+  document.querySelectorAll('.step-panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('step-' + step).classList.add('active');
+  currentStep = step;
+  // Trigger step-specific setup
+  if (step === 3) setupColumnMapping();
+  if (step === 4) setupReview();
+}
+
+function validateStep(step) {
+  if (step === 1) {
+    if (!state.auditType) { showToast('Please select an audit type', 'error'); return false; }
+    state.bomAName = document.getElementById('bomAName').value.trim() || 'Arena BOM';
+    state.bomBName = document.getElementById('bomBName').value.trim() || 'CM BOM';
+    // Update dynamic labels throughout the UI
+    document.getElementById('arena-upload-title').textContent = state.bomAName;
+    document.getElementById('cm-upload-title').textContent = state.bomBName;
+    return true;
+  }
+  if (step === 2) {
+    if (!state.arenaData || !state.cmData) { showToast('Please upload both BOM files', 'error'); return false; }
+    // Read metadata from the confirmation form (now in step 2)
+    state.metadata = {
+      assemblyNumber: document.getElementById('assemblyNumber').value.trim(),
+      assemblyName: document.getElementById('assemblyName').value.trim(),
+      program: document.getElementById('program').value.trim(),
+      cm: document.getElementById('cm').value.trim(),
+      build: document.getElementById('build').value === 'Other'
+        ? (document.getElementById('buildOther').value.trim() || 'Other')
+        : document.getElementById('build').value
+    };
+    return true;
+  }
+  if (step === 3) {
+    // Validate required mappings — N/A (__NA__) is accepted for all fields except itemNumber
+    const required = ['itemNumber','itemName','revision','level','quantity','manufacturer','mpn'];
+    if (includesRefDes()) required.push('refDes');
+    const alwaysRequired = ['itemNumber']; // These cannot be N/A
+    for (const key of required) {
+      const aVal = state.columnMap.arena[key];
+      const cVal = state.columnMap.cm[key];
+      // Must have some selection (mapped column or N/A) for each field
+      if (!aVal && aVal !== 0) {
+        showToast('Please map or set N/A for ' + state.bomAName + ': ' + key, 'warning'); return false;
+      }
+      if (key === 'refDes' && !includesRefDes()) continue;
+      if (!cVal && cVal !== 0) {
+        showToast('Please map or set N/A for ' + state.bomBName + ': ' + key, 'warning'); return false;
+      }
+      // Item Number cannot be N/A — it's essential for matching
+      if (alwaysRequired.includes(key)) {
+        if (aVal === '__NA__') { showToast(state.bomAName + ': Item Number is required and cannot be N/A', 'error'); return false; }
+        if (cVal === '__NA__') { showToast(state.bomBName + ': Item Number is required and cannot be N/A', 'error'); return false; }
+      }
+    }
+    return true;
+  }
+  return true;
+}
+
+// ---- Audit Type Selection ----
+function selectAuditType(type) {
+  state.auditType = type;
+  document.getElementById('ee-card').classList.toggle('selected', type === 'EE');
+  document.getElementById('pd-card').classList.toggle('selected', type === 'PD');
+  document.getElementById('full-card').classList.toggle('selected', type === 'FULL');
+}
+
+// ---- File Upload ----
+function handleDragOver(e, el) { e.preventDefault(); e.stopPropagation(); el.classList.add('dragover'); }
+function handleDragLeave(e, el) { e.preventDefault(); e.stopPropagation(); el.classList.remove('dragover'); }
+function handleDrop(e, which) {
+  e.preventDefault(); e.stopPropagation();
+  const zone = document.getElementById(which + '-upload-zone');
+  zone.classList.remove('dragover');
+  const files = e.dataTransfer.files;
+  if (files.length > 0) processFile(files[0], which);
+}
+function handleFileSelect(e, which) {
+  e.stopPropagation();
+  if (e.target.files.length > 0) processFile(e.target.files[0], which);
+}
+
+function processFile(file, which) {
+  if (!file.name.toLowerCase().endsWith('.csv')) {
+    showToast('Please upload a CSV file', 'error');
+    return;
+  }
+  Papa.parse(file, {
+    header: false,
+    skipEmptyLines: false,
+    complete: function(results) {
+      const allRows = results.data;
+      if (allRows.length < 2) { showToast('File has insufficient data', 'error'); return; }
+      // Find header row (first row with multiple non-empty cells)
+      let headerIdx = 0;
+      for (let i = 0; i < Math.min(allRows.length, 10); i++) {
+        const nonEmpty = allRows[i].filter(c => c && c.toString().trim()).length;
+        if (nonEmpty >= 3) { headerIdx = i; break; }
+      }
+      const headers = allRows[headerIdx].map(h => (h || '').toString().trim());
+      const dataRows = allRows.slice(headerIdx + 1).filter(r => r.some(c => c && c.toString().trim()));
+
+      if (which === 'arena') {
+        state.arenaHeaders = headers;
+        state.arenaData = dataRows;
+        state.arenaRaw = allRows;
+      } else {
+        state.cmHeaders = headers;
+        state.cmData = dataRows;
+        state.cmRaw = allRows;
+      }
+
+      // Update UI
+      const zone = document.getElementById(which + '-upload-zone');
+      zone.classList.add('has-file');
+      const content = document.getElementById(which + '-upload-content');
+      const bomLabel = which === 'arena' ? state.bomAName : state.bomBName;
+      content.innerHTML = '<div class="uz-icon">✅</div><h3>' + bomLabel + '</h3><p style="color:var(--success)">File loaded successfully</p>';
+
+      const info = document.getElementById(which + '-file-info');
+      info.classList.remove('hidden');
+      info.innerHTML = '<div class="fi-name">' + file.name + '</div><div class="fi-detail">' +
+        (file.size / 1024).toFixed(1) + ' KB · ' + dataRows.length + ' data rows · ' + headers.filter(Boolean).length + ' columns</div>';
+
+      showToast((which === 'arena' ? state.bomAName : state.bomBName) + ' loaded: ' + dataRows.length + ' rows');
+
+      // Check row count difference warning
+      if (state.arenaData && state.cmData) {
+        const diff = Math.abs(state.arenaData.length - state.cmData.length);
+        const maxRows = Math.max(state.arenaData.length, state.cmData.length);
+        const warnDiv = document.getElementById('upload-warnings');
+        if (diff / maxRows > 0.5) {
+          warnDiv.innerHTML = '<div class="warning-box">⚠️ Warning: BOMs have significantly different item counts (' +
+            state.arenaData.length + ' vs ' + state.cmData.length + ' rows, >' + Math.round(diff/maxRows*100) + '% difference). This may indicate structural differences.</div>';
+        } else {
+          warnDiv.innerHTML = '';
+        }
+        // Both files loaded — infer and show metadata for confirmation
+        inferMetadata();
+      }
+    },
+    error: function(err) { showToast('Error parsing file: ' + err.message, 'error'); }
+  });
+}
+
+// ---- Column Mapping ----
+const FIELD_DEFS = [
+  { key: 'itemNumber', label: 'Item Number', required: true, patterns: ['item number','item no','part number','part no','customer p/n','hh p/n','pn','item #','part #','item_number','partnumber'] },
+  { key: 'itemName', label: 'Item Name', required: true, patterns: ['item name','name','description','part description','item description','part name','desc'] },
+  { key: 'revision', label: 'Revision', required: true, patterns: ['revision','rev','item revision','rev.'] },
+  { key: 'level', label: 'BOM Level', required: true, patterns: ['level','bom level','lvl','lev','l'] },
+  { key: 'quantity', label: 'Quantity', required: true, patterns: ['quantity','qty','usage','qty per','quantity per','qpa','qty/usage'] },
+  { key: 'manufacturer', label: 'Manufacturer', required: true, patterns: ['manufacturer','mfr','mfg','prod manufacturer','vendor','supplier','mfr name'] },
+  { key: 'mpn', label: 'MPN', required: true, patterns: ['mpn','manufacturer part number','mfr part number','mfr p/n','vendor p/n','prod manufacturer item number','manufacturer item number','mfr pn'] },
+  { key: 'refDes', label: 'Reference Designator', required: false, patterns: ['reference designator','ref des','ref designator','refdes','reference des','ref. des.','ref des.'] }
+];
+
+function autoMapColumn(headers, dataRows) {
+  const map = {};
+  const usedCols = new Set();
+
+  for (const field of FIELD_DEFS) {
+    let bestCol = -1;
+    let bestScore = 0;
+
+    for (let i = 0; i < headers.length; i++) {
+      if (usedCols.has(i)) continue;
+      const h = (headers[i] || '').toLowerCase().trim();
+      if (!h) continue;
+
+      // Check exact/partial header match
+      for (const pat of field.patterns) {
+        if (h === pat) { bestCol = i; bestScore = 100; break; }
+        if (h.includes(pat) || pat.includes(h)) {
+          const score = similarity(h, pat);
+          if (score > bestScore) { bestScore = score; bestCol = i; }
+        }
+      }
+      if (bestScore === 100) break;
+    }
+
+    // Data pattern fallback if no good header match
+    if (bestScore < 60 && dataRows.length > 0) {
+      for (let i = 0; i < headers.length; i++) {
+        if (usedCols.has(i)) continue;
+        const samples = dataRows.slice(0, 10).map(r => (r[i] || '').toString().trim()).filter(Boolean);
+        if (samples.length === 0) continue;
+
+        if (field.key === 'itemNumber') {
+          const hasPrefix = samples.some(s => /^[AEDM]-[A-Z]{2,3}-\d{3,4}/i.test(s));
+          if (hasPrefix && bestScore < 80) { bestCol = i; bestScore = 80; }
+        }
+        if (field.key === 'quantity') {
+          const allNumeric = samples.every(s => /^[\d.]+/.test(s));
+          const smallNums = samples.every(s => parseFloat(s) < 10000);
+          if (allNumeric && smallNums && bestScore < 70) { bestCol = i; bestScore = 70; }
+        }
+        if (field.key === 'refDes') {
+          const hasRefDes = samples.some(s => /^[A-Z]+\d+/i.test(s) && s.includes(','));
+          if (hasRefDes && bestScore < 80) { bestCol = i; bestScore = 80; }
+        }
+        if (field.key === 'level') {
+          const allSmallInt = samples.every(s => /^-?\d+$/.test(s) && Math.abs(parseInt(s)) <= 20);
+          if (allSmallInt && bestScore < 70) { bestCol = i; bestScore = 70; }
+        }
+      }
+    }
+
+    if (bestCol >= 0 && bestScore >= 40) {
+      map[field.key] = headers[bestCol];
+      usedCols.add(bestCol);
+    }
+  }
+  return map;
+}
+
+function setupColumnMapping() {
+  const arenaMap = autoMapColumn(state.arenaHeaders, state.arenaData);
+  const cmMap = autoMapColumn(state.cmHeaders, state.cmData);
+
+  state.columnMap.arena = {};
+  state.columnMap.cm = {};
+
+  // Update mapping panel headers with custom BOM names
+  document.getElementById('arena-mapping-title').textContent = state.bomAName + ' Columns';
+  document.getElementById('cm-mapping-title').textContent = state.bomBName + ' Columns';
+
+  ['arena', 'cm'].forEach(which => {
+    const headers = which === 'arena' ? state.arenaHeaders : state.cmHeaders;
+    const autoMap = which === 'arena' ? arenaMap : cmMap;
+    const container = document.getElementById(which + '-mappings');
+    container.innerHTML = '';
+
+    FIELD_DEFS.forEach(field => {
+      if (field.key === 'refDes' && !includesRefDes()) return;
+
+      const row = document.createElement('div');
+      row.className = 'mapping-row';
+
+      const label = document.createElement('label');
+      label.textContent = field.label + (field.required || (field.key === 'refDes' && includesRefDes()) ? ' *' : '');
+
+      const select = document.createElement('select');
+      select.id = which + '-map-' + field.key;
+      select.innerHTML = '<option value="">-- Select --</option><option value="__NA__">N/A (skip this field)</option>';
+      headers.forEach((h, i) => {
+        if (h || true) {
+          const opt = document.createElement('option');
+          opt.value = h || '(col_' + i + ')';
+          opt.textContent = h || '(Column ' + (i+1) + ')';
+          if (autoMap[field.key] === h && h) opt.selected = true;
+          select.appendChild(opt);
+        }
+      });
+
+      select.addEventListener('change', () => {
+        const val = select.value;
+        if (val === '__NA__') {
+          state.columnMap[which][field.key] = '__NA__';
+          status.className = 'mapping-status na';
+          status.textContent = '—';
+        } else if (val) {
+          state.columnMap[which][field.key] = val;
+          status.className = 'mapping-status mapped';
+          status.textContent = '✓';
+        } else {
+          delete state.columnMap[which][field.key];
+          status.className = 'mapping-status unmapped';
+          status.textContent = '○';
+        }
+      });
+
+      const status = document.createElement('div');
+      if (autoMap[field.key]) {
+        state.columnMap[which][field.key] = autoMap[field.key];
+        status.className = 'mapping-status mapped';
+        status.textContent = '✓';
+      } else {
+        status.className = 'mapping-status unmapped';
+        status.textContent = '○';
+      }
+
+      row.appendChild(label);
+      row.appendChild(select);
+      row.appendChild(status);
+      container.appendChild(row);
+    });
+  });
+}
+
+function handleMultiColLevel() {
+  // If checked, we'll merge multi-column levels during processing
+  showToast('Multi-column level handling will be applied during audit', 'warning');
+}
+
+// ---- Metadata Inference ----
+function inferMetadata() {
+  // Only run when both BOMs are loaded
+  if (!state.arenaData || !state.cmData) return;
+
+  // Show the metadata confirmation card
+  document.getElementById('metadata-confirm-card').classList.remove('hidden');
+
+  // Use the auto-map logic to find the item number and item name columns in each BOM
+  const aMap = autoMapColumn(state.arenaHeaders, state.arenaData);
+  const cMap = autoMapColumn(state.cmHeaders, state.cmData);
+
+  // Helper to get a column value from a row
+  function getVal(row, headers, colName) {
+    if (!colName) return '';
+    const idx = headers.indexOf(colName);
+    if (idx >= 0) return (row[idx] || '').toString().trim();
+    for (let i = 0; i < headers.length; i++) {
+      if ((headers[i] || '').toLowerCase().trim() === colName.toLowerCase().trim()) return (row[i] || '').toString().trim();
+    }
+    return '';
+  }
+
+  // Helper to find the root item (first row with level 0 or the first data row)
+  function findRootItem(dataRows, headers, colMap) {
+    const levelCol = colMap.level;
+    const itemNumCol = colMap.itemNumber;
+    const itemNameCol = colMap.itemName;
+    // Try to find a row with level 0
+    if (levelCol) {
+      for (let i = 0; i < Math.min(dataRows.length, 20); i++) {
+        const lvl = getVal(dataRows[i], headers, levelCol);
+        if (lvl === '0') {
+          return {
+            itemNumber: getVal(dataRows[i], headers, itemNumCol),
+            itemName: getVal(dataRows[i], headers, itemNameCol)
+          };
+        }
+      }
+    }
+    // Fallback: first row with an item number that starts with A- (assembly prefix)
+    if (itemNumCol) {
+      for (let i = 0; i < Math.min(dataRows.length, 10); i++) {
+        const num = getVal(dataRows[i], headers, itemNumCol);
+        if (num && /^A-/i.test(num)) {
+          return {
+            itemNumber: num,
+            itemName: getVal(dataRows[i], headers, itemNameCol)
+          };
+        }
+      }
+    }
+    // Last fallback: just the first row
+    if (itemNumCol && dataRows.length > 0) {
+      return {
+        itemNumber: getVal(dataRows[0], headers, itemNumCol),
+        itemName: getVal(dataRows[0], headers, itemNameCol)
+      };
+    }
+    return { itemNumber: '', itemName: '' };
+  }
+
+  // Try to find the vendor/CM from the CM BOM
+  function findCM(dataRows, headers, colMap) {
+    // Look for a "vendor" column pattern
+    const vendorPatterns = ['vendor','cm','contract manufacturer','supplier'];
+    let vendorCol = null;
+    for (let i = 0; i < headers.length; i++) {
+      const h = (headers[i] || '').toLowerCase().trim();
+      if (vendorPatterns.some(p => h.includes(p))) { vendorCol = headers[i]; break; }
+    }
+    if (!vendorCol) return '';
+    // Find the most common non-empty vendor value
+    const counts = {};
+    for (let i = 0; i < Math.min(dataRows.length, 50); i++) {
+      const v = getVal(dataRows[i], headers, vendorCol);
+      if (v) { counts[v] = (counts[v] || 0) + 1; }
+    }
+    let best = '', bestCount = 0;
+    for (const [k, c] of Object.entries(counts)) {
+      if (c > bestCount) { best = k; bestCount = c; }
+    }
+    return best;
+  }
+
+  // Try to infer program from the assembly name (common pattern: "..., S3a" or "(S3a)")
+  function inferProgram(assemblyName) {
+    if (!assemblyName) return '';
+    // Pattern: trailing word after comma
+    let m = assemblyName.match(/,\s*([A-Za-z0-9]+)\s*$/);
+    if (m) return m[1];
+    // Pattern: in parentheses
+    m = assemblyName.match(/\(([A-Za-z0-9]+)\)/);
+    if (m) return m[1];
+    return '';
+  }
+
+  const arenaRoot = findRootItem(state.arenaData, state.arenaHeaders, aMap);
+  const cmRoot = findRootItem(state.cmData, state.cmHeaders, cMap);
+
+  // Prefer Arena root, fall back to CM root
+  const rootItemNumber = arenaRoot.itemNumber || cmRoot.itemNumber || '';
+  const rootItemName = arenaRoot.itemName || cmRoot.itemName || '';
+  const inferredCM = findCM(state.cmData, state.cmHeaders, cMap);
+  const inferredProgram = inferProgram(rootItemName);
+
+  // Build a summary of what was inferred vs what's missing
+  const inferred = [];
+  const missing = [];
+
+  // Populate form fields (only if currently empty)
+  function setIfEmpty(id, value, label) {
+    const el = document.getElementById(id);
+    if (value) {
+      if (!el.value.trim()) el.value = value;
+      inferred.push(label + ': <strong>' + value + '</strong>');
+    } else {
+      if (!el.value.trim()) missing.push(label);
+    }
+  }
+
+  setIfEmpty('assemblyNumber', rootItemNumber, 'Assembly Number');
+  setIfEmpty('assemblyName', rootItemName, 'Assembly Name');
+  setIfEmpty('program', inferredProgram, 'Program');
+  setIfEmpty('cm', inferredCM, 'CM');
+  // Build can't be inferred from BOM data
+  if (!document.getElementById('build').value) missing.push('Build');
+
+  // Show info message
+  const infoEl = document.getElementById('inferred-info');
+  let html = '';
+  if (inferred.length) {
+    html += '<strong>✅ Auto-detected:</strong> ' + inferred.join(' · ');
+  }
+  if (missing.length) {
+    if (html) html += '<br>';
+    html += '<strong style="color:var(--warning)">⚠️ Could not infer:</strong> ' + missing.join(', ') + ' — please fill in manually.';
+  }
+  if (!html) html = '✅ All metadata fields populated.';
+  infoEl.innerHTML = html;
+
+  showToast('Metadata auto-detected from BOM root item. Please verify.', 'success');
+}
+
+function handleBuildChange() {
+  const sel = document.getElementById('build');
+  const other = document.getElementById('buildOther');
+  if (sel.value === 'Other') {
+    other.classList.remove('hidden');
+    other.focus();
+  } else {
+    other.classList.add('hidden');
+    other.value = '';
+  }
+}
+
+// ---- Review Setup ----
+function setupReview() {
+  const grid = document.getElementById('review-grid');
+  const comparisons = ['Item Number/Name/Revision', 'BOM Level', 'Quantity', 'MPN & Manufacturer'];
+  if (includesRefDes()) comparisons.push('Reference Designators');
+  comparisons.push('Missing Items');
+
+  grid.innerHTML = [
+    { title: 'Audit Type', value: getAuditLabel() + ' Audit' },
+    { title: 'Assembly', value: (state.metadata.assemblyNumber || 'N/A') + ' - ' + (state.metadata.assemblyName || 'N/A') },
+    { title: state.bomAName, value: state.arenaData.length + ' rows' },
+    { title: state.bomBName, value: state.cmData.length + ' rows' },
+    { title: 'Program / CM / Build', value: [state.metadata.program, state.metadata.cm, state.metadata.build].filter(Boolean).join(' / ') || 'N/A' },
+    { title: 'Comparisons', value: comparisons.join(', ') }
+  ].map(c => '<div class="review-card"><h4>' + c.title + '</h4><div class="value">' + c.value + '</div></div>').join('');
+}
+
+// ---- Modal ----
+function toggleModal() {
+  document.getElementById('info-modal').classList.toggle('open');
+}
+
+// ---- Reset ----
+function resetAudit() {
+  state.auditType = null; state.arenaData = null; state.cmData = null;
+  state.bomAName = 'Arena BOM'; state.bomBName = 'CM BOM';
+  state.arenaHeaders = []; state.cmHeaders = []; state.arenaRaw = []; state.cmRaw = [];
+  state.columnMap = { arena: {}, cm: {} }; state.results = null; state.workbook = null;
+  document.getElementById('ee-card').classList.remove('selected');
+  document.getElementById('pd-card').classList.remove('selected');
+  document.getElementById('full-card').classList.remove('selected');
+  document.getElementById('bomAName').value = 'Arena BOM';
+  document.getElementById('bomBName').value = 'CM BOM';
+  document.querySelectorAll('#assemblyNumber,#assemblyName,#program,#cm').forEach(i => i.value = '');
+  document.getElementById('build').value = '';
+  document.getElementById('buildOther').value = '';
+  document.getElementById('buildOther').classList.add('hidden');
+  document.getElementById('metadata-confirm-card').classList.add('hidden');
+  document.getElementById('inferred-info').innerHTML = '';
+  ['arena','cm'].forEach(w => {
+    const defaultName = w === 'arena' ? 'Arena BOM' : 'CM BOM';
+    document.getElementById(w+'-upload-zone').classList.remove('has-file');
+    document.getElementById(w+'-upload-content').innerHTML = '<div class="uz-icon">📄</div><h3 id="'+w+'-upload-title">'+defaultName+'</h3><p>Drag & drop CSV file here or click to browse</p>';
+    document.getElementById(w+'-file-info').classList.add('hidden');
+    document.getElementById(w+'-file-info').innerHTML = '';
+    document.getElementById(w+'-file-input').value = '';
+  });
+  document.getElementById('upload-warnings').innerHTML = '';
+  document.getElementById('progress-area').classList.add('hidden');
+  document.getElementById('run-audit-btn').disabled = false;
+  document.getElementById('run-audit-btn').classList.add('btn-pulse');
+  goToStep(1);
+}
+
+// ============================================================
+// CORE AUDIT ENGINE  
+// ============================================================
+
+function isFieldMapped(fieldKey) {
+  const aVal = state.columnMap.arena[fieldKey];
+  const cVal = state.columnMap.cm[fieldKey];
+  // Field is considered mapped if at least one side has a real column (not N/A or empty)
+  return (aVal && aVal !== '__NA__') || (cVal && cVal !== '__NA__');
+}
+
+function getColValue(row, headers, colName) {
+  if (!colName || colName === '__NA__') return '';
+  const idx = headers.indexOf(colName);
+  if (idx >= 0) return (row[idx] || '').toString().trim();
+  for (let i = 0; i < headers.length; i++) {
+    if ((headers[i] || '').toLowerCase().trim() === colName.toLowerCase().trim()) return (row[i] || '').toString().trim();
+  }
+  const m = colName.match(/^\(col_(\d+)\)$/);
+  if (m) return (row[parseInt(m[1])] || '').toString().trim();
+  return '';
+}
+
+function getMergedLevel(row, headers, levelColName) {
+  if (!levelColName || levelColName === '__NA__') return '';
+  const idx = headers.indexOf(levelColName);
+  if (idx < 0) return '';
+  const multiCol = document.getElementById('multi-col-level') && document.getElementById('multi-col-level').checked;
+  if (!multiCol) return (row[idx] || '').toString().trim();
+  let levelStr = '';
+  for (let i = idx; i < headers.length; i++) {
+    if (i > idx && headers[i] && headers[i].trim()) break;
+    const val = (row[i] || '').toString().trim();
+    if (val && /^-?\d+$/.test(val)) levelStr = val;
+  }
+  return levelStr || (row[idx] || '').toString().trim();
+}
+
+function log(msg, type) {
+  const logEl = document.getElementById('progress-log');
+  const entry = document.createElement('div');
+  entry.className = 'log-entry' + (type ? ' ' + type : '');
+  entry.textContent = msg;
+  logEl.appendChild(entry);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+function setProgress(pct, status) {
+  document.getElementById('progress-fill').style.width = pct + '%';
+  if (status) document.getElementById('progress-status').textContent = status;
+}
+
+async function runAudit() {
+  document.getElementById('run-audit-btn').disabled = true;
+  document.getElementById('run-audit-btn').classList.remove('btn-pulse');
+  document.getElementById('progress-area').classList.remove('hidden');
+  document.getElementById('back-btn-4').disabled = true;
+  document.getElementById('progress-log').innerHTML = '';
+  await new Promise(r => setTimeout(r, 50));
+
+  try {
+    log('Starting ' + getAuditLabel() + ' Audit...', 'success');
+    setProgress(5, 'Building lookup dictionaries...');
+    await new Promise(r => setTimeout(r, 30));
+
+    const aH = state.arenaHeaders, cH = state.cmHeaders;
+    const aM = state.columnMap.arena, cM = state.columnMap.cm;
+
+    // Build CM lookup
+    log('Processing ' + state.bomBName + ' (' + state.cmData.length + ' rows)...');
+    const cmLookup = {}, cmAll = [];
+    let cmRoot = null, cmAudit = 0, cmExcl = 0;
+    const cmExclEx = [];
+
+    for (let i = 0; i < state.cmData.length; i++) {
+      const row = state.cmData[i];
+      const raw = getColValue(row, cH, cM.itemNumber);
+      if (!raw) continue;
+      const lvl = getMergedLevel(row, cH, cM.level);
+      const lvlN = parseFloat(lvl);
+      if (cmRoot === null && !isNaN(lvlN) && lvlN >= 0) cmRoot = lvlN;
+      const it = {
+        rawItemNumber:raw, itemNumber:normalizeItemNumber(raw),
+        itemName:getColValue(row,cH,cM.itemName), revision:getColValue(row,cH,cM.revision),
+        normalizedRevision:normalizeRevision(getColValue(row,cH,cM.revision)),
+        level:lvl, levelNum:lvlN, normalizedLevel:null,
+        quantity:getColValue(row,cH,cM.quantity), quantityNum:parseQuantity(getColValue(row,cH,cM.quantity)),
+        manufacturer:getColValue(row,cH,cM.manufacturer), mpn:getColValue(row,cH,cM.mpn),
+        refDes: includesRefDes() ? getColValue(row,cH,cM.refDes) : '',
+        lineNumber:i+2, isAuditType:matchesAuditType(raw),
+        isAlternate: lvlN === -1 || lvl === '*' || lvl === '-1',
+        hasLevel: lvl !== '' && lvl !== '*' && !isNaN(lvlN) && lvlN !== -1
+      };
+      cmAll.push(it);
+      if (it.isAuditType) { cmAudit++; if (!cmLookup[it.itemNumber]) cmLookup[it.itemNumber]=[]; cmLookup[it.itemNumber].push(it); }
+      else { cmExcl++; if (cmExclEx.length<10) cmExclEx.push(raw); }
+    }
+    if (cmRoot===null) cmRoot=0;
+    cmAll.forEach(it => { if (!isNaN(it.levelNum)) it.normalizedLevel = it.levelNum - cmRoot; });
+
+    log(state.bomBName+': '+cmAll.length+' total, '+cmAudit+' '+getAuditLabel()+' items','success');
+    setProgress(20,'Processing '+state.bomAName+'...');
+    await new Promise(r=>setTimeout(r,30));
+
+    // Build Arena items
+    log('Processing '+state.bomAName+' ('+state.arenaData.length+' rows)...');
+    const arAll = [];
+    let arRoot=null, arAudit=0, arExcl=0;
+    const arExclEx = [];
+
+    for (let i=0; i<state.arenaData.length; i++) {
+      const row = state.arenaData[i];
+      const raw = getColValue(row,aH,aM.itemNumber);
+      if (!raw) continue;
+      const lvl = getColValue(row,aH,aM.level);
+      const lvlN = parseFloat(lvl);
+      if (arRoot===null && !isNaN(lvlN) && lvlN>=0) arRoot=lvlN;
+      const it = {
+        rawItemNumber:raw, itemNumber:normalizeItemNumber(raw),
+        itemName:getColValue(row,aH,aM.itemName), revision:getColValue(row,aH,aM.revision),
+        normalizedRevision:normalizeRevision(getColValue(row,aH,aM.revision)),
+        level:lvl, levelNum:lvlN, normalizedLevel:null,
+        quantity:getColValue(row,aH,aM.quantity), quantityNum:parseQuantity(getColValue(row,aH,aM.quantity)),
+        manufacturer:getColValue(row,aH,aM.manufacturer), mpn:getColValue(row,aH,aM.mpn),
+        refDes: includesRefDes() ? getColValue(row,aH,aM.refDes) : '',
+        lineNumber:i+2, isAuditType:matchesAuditType(raw),
+        isAlternate: lvlN === -1 || lvl === '*' || lvl === '-1',
+        hasLevel: lvl !== '' && lvl !== '*' && !isNaN(lvlN) && lvlN !== -1
+      };
+      arAll.push(it);
+      if (it.isAuditType) arAudit++;
+      else { arExcl++; if (arExclEx.length<10) arExclEx.push(raw); }
+    }
+    if (arRoot===null) arRoot=0;
+    arAll.forEach(it => { if (!isNaN(it.levelNum)) it.normalizedLevel = it.levelNum - arRoot; });
+
+    log(state.bomAName+': '+arAll.length+' total, '+arAudit+' '+getAuditLabel()+' items','success');
+    setProgress(35,'Comparing items...');
+    await new Promise(r=>setTimeout(r,30));
+
+    // Compare
+    const d = {nameRev:[],level:[],quantity:[],mpnMfr:[],refDes:[],missingInCM:[],missingInArena:[]};
+    let compared=0, exact=0;
+    const cmSeen = new Set();
+    const arLookup = {};
+    arAll.filter(a=>a.isAuditType).forEach(it => { if (!arLookup[it.itemNumber]) arLookup[it.itemNumber]=[]; arLookup[it.itemNumber].push(it); });
+
+    // Quantity aggregation — always aggregate total qty per item number across all occurrences.
+    // Exclude alternate vendor/supplier rows (level is "-1" or "*") to avoid double-counting.
+    const arQA={}, cmQA={};
+    arAll.filter(a=>a.isAuditType&&!a.isAlternate).forEach(it => {
+      if (!arQA[it.itemNumber]) arQA[it.itemNumber]={t:0, lines:[]};
+      arQA[it.itemNumber].t += it.quantityNum;
+      arQA[it.itemNumber].lines.push(it.lineNumber);
+    });
+    cmAll.filter(a=>a.isAuditType&&!a.isAlternate).forEach(it => {
+      if (!cmQA[it.itemNumber]) cmQA[it.itemNumber]={t:0, lines:[]};
+      cmQA[it.itemNumber].t += it.quantityNum;
+      cmQA[it.itemNumber].lines.push(it.lineNumber);
+    });
+    // Round aggregated totals to avoid floating point drift
+    for (const k in arQA) arQA[k].t = Math.round(arQA[k].t * 1000) / 1000;
+    for (const k in cmQA) cmQA[k].t = Math.round(cmQA[k].t * 1000) / 1000;
+
+    log('Running comparisons...');
+    for (const iNum of Object.keys(arLookup)) {
+      const aItems = arLookup[iNum], cItems = cmLookup[iNum];
+      if (!cItems || !cItems.length) { aItems.forEach(a=>d.missingInCM.push({itemNumber:a.rawItemNumber,itemName:a.itemName,revision:a.revision,quantity:a.quantity,lineNumber:a.lineNumber})); continue; }
+      cmSeen.add(iNum);
+      const a=aItems[0], c=cItems[0];
+      compared++; let bad=false;
+
+      // Name/Rev (skip if both fields are N/A)
+      const nameIsMapped = isFieldMapped('itemName');
+      const revIsMapped = isFieldMapped('revision');
+      const ns = nameIsMapped ? similarity(a.itemName,c.itemName) : 100;
+      const rm = revIsMapped ? a.normalizedRevision.toLowerCase()===c.normalizedRevision.toLowerCase() : true;
+      const nm = ns>=80;
+      if ((nameIsMapped || revIsMapped) && (!nm||!rm)) { bad=true; d.nameRev.push({itemNumber:a.rawItemNumber,cmItemNumber:c.rawItemNumber,arenaName:a.itemName,cmName:c.itemName,nameSimilarity:ns,nameMatchStatus:nm?'MATCH ('+ns+'%)':'MISMATCH ('+ns+'%)',arenaRev:a.revision,cmRev:c.revision,arenaNormRev:a.normalizedRevision,cmNormRev:c.normalizedRevision,revMatchStatus:rm?'MATCH':'MISMATCH',discrepancyType:(!nm&&!rm)?'Both':(!nm?'Name':'Revision'),arenaLine:a.lineNumber,cmLine:c.lineNumber}); }
+
+      // Level (skip if N/A, or if either item lacks a level value)
+      if (isFieldMapped('level')&&a.hasLevel&&c.hasLevel&&a.normalizedLevel!==null&&c.normalizedLevel!==null&&!a.isAlternate&&!c.isAlternate&&a.normalizedLevel!==c.normalizedLevel) { bad=true; d.level.push({itemNumber:a.rawItemNumber,itemName:a.itemName,arenaLevelOrig:a.level,cmLevelOrig:c.level,arenaLevelNorm:a.normalizedLevel,cmLevelNorm:c.normalizedLevel,difference:Math.abs(a.normalizedLevel-c.normalizedLevel),arenaLine:a.lineNumber,cmLine:c.lineNumber}); }
+
+      // Quantity — always use aggregated totals (skip if N/A or both sides are alternate-only)
+      if (isFieldMapped('quantity')) {
+        const aq = arQA[iNum] ? arQA[iNum].t : (a.isAlternate ? null : a.quantityNum);
+        const cq = cmQA[iNum] ? cmQA[iNum].t : (c.isAlternate ? null : c.quantityNum);
+        if (aq !== null && cq !== null && Math.abs(aq - cq) > 0.001) {
+          bad=true;
+          const df = Math.round(Math.abs(aq - cq) * 1000) / 1000;
+          const pd = aq > 0 ? Math.round(df / aq * 100) : (cq > 0 ? 100 : 0);
+          let sv = 'Minor';
+          if (pd > 20 || df > 10) sv = 'Critical';
+          else if (pd >= 10 || df >= 5) sv = 'Warning';
+          const aLines = arQA[iNum] ? arQA[iNum].lines.join(', ') : String(a.lineNumber);
+          const cLines = cmQA[iNum] ? cmQA[iNum].lines.join(', ') : String(c.lineNumber);
+          d.quantity.push({itemNumber:a.rawItemNumber, cmItemNumber:c.rawItemNumber, itemName:a.itemName, arenaQty:aq, cmQty:cq, difference:df, pctDifference:pd, severity:sv, arenaLine:aLines, cmLine:cLines});
+        }
+      }
+
+      // MPN/Mfr (skip if both N/A)
+      const mfrMapped = isFieldMapped('manufacturer') || isFieldMapped('mpn');
+      const gen=a.itemNumber.startsWith('E-GRE')||a.itemNumber.startsWith('E-GCA');
+      if (mfrMapped && !gen) {
+        const am=(a.mpn||'').toUpperCase().trim(), cm2=(c.mpn||'').toUpperCase().trim();
+        const ms=similarity(a.manufacturer,c.manufacturer), mm=am===cm2, mfm=ms>=80;
+        if (!mm||!mfm) { if(am||cm2||a.manufacturer||c.manufacturer) { bad=true; d.mpnMfr.push({mpn:am||cm2||'N/A',arenaItemNumber:a.rawItemNumber,cmItemNumber:c.rawItemNumber,arenaManufacturer:a.manufacturer,cmManufacturer:c.manufacturer,arenaMPN:a.mpn,cmMPN:c.mpn,mpnMatch:mm?'MATCH':((!am&&!cm2)?'No MPN':'MISMATCH'),mfrMatchPct:ms+'%',discrepancyType:(!mm&&!mfm)?'Both':(!mm?'MPN':'Manufacturer'),arenaLine:a.lineNumber,cmLine:c.lineNumber}); } }
+      }
+
+      // RefDes (EE items in EE or FULL mode, skip if N/A)
+      if (isFieldMapped('refDes') && includesRefDes() && (state.auditType==='EE' || isEEItem(a.rawItemNumber))) {
+        const ar2=parseRefDes(a.refDes),cr2=parseRefDes(c.refDes);
+        let iss=[];
+        if (hasRange(a.refDes)||hasRange(c.refDes)) iss.push('Range Found');
+        if (!a.isAlternate&&ar2.length>0&&ar2.length!==a.quantityNum) iss.push('Count Error (Arena: '+ar2.length+' refs vs qty '+a.quantityNum+')');
+        if (!c.isAlternate&&cr2.length>0&&cr2.length!==c.quantityNum) iss.push('Count Error (CM: '+cr2.length+' refs vs qty '+c.quantityNum+')');
+        const aS=new Set(ar2.map(r=>r.toUpperCase())),cS=new Set(cr2.map(r=>r.toUpperCase()));
+        const aO=[...aS].filter(r=>!cS.has(r)),cO=[...cS].filter(r=>!aS.has(r));
+        if (aO.length||cO.length) iss.push('Mismatch');
+        if (iss.length) { bad=true; d.refDes.push({itemNumber:a.rawItemNumber,itemName:a.itemName,arenaRefDes:a.refDes,cmRefDes:c.refDes,arenaRefCount:ar2.length,cmRefCount:cr2.length,arenaQty:a.quantity,issueType:iss.length>1?'Multiple Issues':iss[0],arenaOnly:aO.join(', '),cmOnly:cO.join(', '),arenaLine:a.lineNumber,cmLine:c.lineNumber}); }
+      }
+      if (!bad) exact++;
+    }
+
+    setProgress(60,'Finding missing items...');
+    await new Promise(r=>setTimeout(r,30));
+    for (const iNum of Object.keys(cmLookup)) {
+      if (!cmSeen.has(iNum)) cmLookup[iNum].forEach(c=>d.missingInArena.push({itemNumber:c.rawItemNumber,itemName:c.itemName,revision:c.revision,quantity:c.quantity,lineNumber:c.lineNumber}));
+    }
+    log('Missing from '+state.bomBName+': '+d.missingInCM.length, d.missingInCM.length?'warning':'success');
+    log('Missing from '+state.bomAName+': '+d.missingInArena.length, d.missingInArena.length?'warning':'success');
+
+    // EE ref des detail (EE audit or EE items in FULL audit)
+    let rdDetail=[];
+    if (includesRefDes()) {
+      setProgress(65,'Building ref des map...');
+      await new Promise(r=>setTimeout(r,30));
+      const arm={},crm={};
+      const rdFilter = state.auditType==='FULL' ? (a=>a.isAuditType&&!a.isAlternate&&isEEItem(a.rawItemNumber)) : (a=>a.isAuditType&&!a.isAlternate);
+      arAll.filter(rdFilter).forEach(it=>parseRefDes(it.refDes).forEach(rd=>{arm[rd.toUpperCase()]=it.itemNumber;}));
+      cmAll.filter(rdFilter).forEach(it=>parseRefDes(it.refDes).forEach(rd=>{crm[rd.toUpperCase()]=it.itemNumber;}));
+      new Set([...Object.keys(arm),...Object.keys(crm)]).forEach(rd=>{
+        const ai=arm[rd]||'',ci=crm[rd]||'';
+        if (ai!==ci) rdDetail.push({refDes:rd,arenaItem:ai,cmItem:ci,match:'MISMATCH'});
+      });
+    }
+
+    setProgress(70,'Generating report...');
+    await new Promise(r=>setTimeout(r,30));
+    const totalD=d.nameRev.length+d.level.length+d.quantity.length+d.mpnMfr.length+d.refDes.length+d.missingInCM.length+d.missingInArena.length;
+
+    state.results = { d, compared, exact, totalD, arenaTotal:arAll.length, cmTotal:cmAll.length,
+      arAudit:arAudit, cmAudit:cmAudit, arExcl, cmExcl, arExclEx, cmExclEx, rdDetail, arAll, cmAll, arRoot, cmRoot };
+
+    log('Audit complete! Discrepancies: '+totalD, totalD?'warning':'success');
+    log('Exact matches: '+exact+'/'+compared+' ('+(compared>0?Math.round(exact/compared*100):0)+'%)','success');
+
+    setProgress(80,'Building XLSX workbook...');
+    await new Promise(r=>setTimeout(r,30));
+    buildWorkbook();
+    setProgress(100,'Audit complete!');
+    log('Report ready for download!','success');
+    showToast('Audit complete! '+totalD+' discrepancies found.', totalD?'warning':'success');
+    setTimeout(()=>{goToStep(5);populateResults();},500);
+  } catch(err) {
+    log('ERROR: '+err.message,'error');
+    showToast('Audit failed: '+err.message,'error');
+    document.getElementById('run-audit-btn').disabled=false;
+    document.getElementById('back-btn-4').disabled=false;
+  }
+}
+
+// ============================================================
+// XLSX WORKBOOK BUILDER
+// ============================================================
+
+function buildWorkbook() {
+  const wb = XLSX.utils.book_new();
+  const r = state.results;
+  const d = r.d;
+  const m = state.metadata;
+  const today = localDateString();
+  const matchPct = r.compared > 0 ? Math.round(r.exact/r.compared*100) : 0;
+
+  const bomA = state.bomAName;
+  const bomB = state.bomBName;
+  const auditLabel = getAuditLabel();
+
+  // Tab 1: Table of Contents
+  const tocData = [
+    [auditLabel + ' AUDIT REPORT'],
+    [],
+    ['Audit Metadata',''],
+    ['Assembly Number', m.assemblyNumber || 'N/A'],
+    ['Assembly Name', m.assemblyName || 'N/A'],
+    ['Program', m.program || 'N/A'],
+    ['CM', m.cm || 'N/A'],
+    ['Build', m.build || 'N/A'],
+    ['Audit Date', today],
+    ['Audit Type', auditLabel + ' Audit'],
+    ['BOM A', bomA],
+    ['BOM B', bomB],
+    [],
+    ['Tab Name','Description'],
+    ['Summary','Statistics and overview of audit results'],
+    ['Item-Name-Rev Discrepancies','MISMATCHES ONLY - Item name and revision differences'],
+    ['BOM Level Discrepancies','MISMATCHES ONLY - BOM hierarchy level differences'],
+    ['Quantity Discrepancies','MISMATCHES ONLY - Quantity/usage differences'],
+    ['MPN-Mfr Discrepancies','MISMATCHES ONLY - MPN and manufacturer differences'],
+  ];
+  if (includesRefDes()) tocData.push(['Ref Des Discrepancies','MISMATCHES ONLY - Reference designator issues']);
+  tocData.push(['Missing Items','Items found in only one BOM']);
+  tocData.push(['Original ' + bomA,'Complete original ' + bomA + ' data']);
+  tocData.push(['Original ' + bomB,'Complete original ' + bomB + ' data']);
+  tocData.push([]);
+  tocData.push(['NOTE: All comparison tabs show DISCREPANCIES ONLY. Items with exact matches are not listed.']);
+  tocData.push(['Total exact matches: ' + r.exact + ' items (' + matchPct + '% of compared items)']);
+  const tocWs = XLSX.utils.aoa_to_sheet(tocData);
+  tocWs['!cols'] = [{wch:30},{wch:60}];
+  XLSX.utils.book_append_sheet(wb, tocWs, 'Table of Contents');
+
+  // Tab 2: Summary
+  const sumData = [
+    ['AUDIT STATISTICS'],
+    [],
+    ['Total Items in ' + bomA, r.arenaTotal],
+    ['Total Items in ' + bomB, r.cmTotal],
+    [auditLabel + ' Items in ' + bomA, r.arAudit],
+    [auditLabel + ' Items in ' + bomB, r.cmAudit],
+    ['Items Compared', r.compared],
+    ['Exact Matches', r.exact + ' (' + matchPct + '%)'],
+    [],
+    ['DISCREPANCY SUMMARY'],
+    [],
+    ['Total Discrepancies Found', r.totalD],
+    [],
+    ['By Category:','Count'],
+    ['Item Name Mismatches', d.nameRev.filter(x=>x.discrepancyType==='Name'||x.discrepancyType==='Both').length],
+    ['Revision Mismatches', d.nameRev.filter(x=>x.discrepancyType==='Revision'||x.discrepancyType==='Both').length],
+    ['BOM Level Mismatches', d.level.length],
+    ['Quantity Discrepancies', d.quantity.length],
+    ['MPN/Manufacturer Mismatches', d.mpnMfr.length],
+  ];
+  if (includesRefDes()) sumData.push(['Reference Designator Issues', d.refDes.length]);
+  sumData.push([]);
+  sumData.push(['Missing Items:','']);
+  sumData.push(['Items Only in ' + bomA, d.missingInCM.length]);
+  sumData.push(['Items Only in ' + bomB, d.missingInArena.length]);
+  sumData.push([]);
+  sumData.push(['ITEMS EXCLUDED FROM AUDIT','']);
+  sumData.push(['Non-'+auditLabel+' Items in ' + bomA, r.arExcl]);
+  sumData.push(['Non-'+auditLabel+' Items in ' + bomB, r.cmExcl]);
+  if (r.arExclEx.length || r.cmExclEx.length) {
+    sumData.push(['Examples of excluded items:','']);
+    [...r.arExclEx, ...r.cmExclEx].slice(0,10).forEach(ex => sumData.push(['', ex]));
+  }
+  sumData.push([]);
+  sumData.push(['CRITICAL DISCREPANCIES (Top 10)','']);
+  const criticals = [...d.quantity.filter(x=>x.severity==='Critical').map(x=>x.itemNumber+' - Quantity: Arena='+x.arenaQty+' CM='+x.cmQty),
+    ...d.missingInCM.slice(0,3).map(x=>x.itemNumber+' - Missing from ' + bomB),
+    ...d.missingInArena.slice(0,3).map(x=>x.itemNumber+' - Missing from ' + bomA),
+    ...d.nameRev.slice(0,2).map(x=>x.itemNumber+' - '+x.discrepancyType+' mismatch')
+  ].slice(0,10);
+  criticals.forEach(c => sumData.push(['', c]));
+  sumData.push([]);
+  sumData.push(['NOTES','']);
+  sumData.push(['','This report shows DISCREPANCIES ONLY']);
+  sumData.push(['','Items with exact matches are not listed in detail tabs']);
+  sumData.push(['','Total matches: '+r.exact+' items ('+matchPct+'% of compared items)']);
+  const sumWs = XLSX.utils.aoa_to_sheet(sumData);
+  sumWs['!cols'] = [{wch:35},{wch:60}];
+  XLSX.utils.book_append_sheet(wb, sumWs, 'Summary');
+
+  // Tab 3: Item-Name-Rev Discrepancies
+  const nrHeader = ['DISCREPANCIES ONLY - Items with exact matches are not shown'];
+  const nrCols = [bomB+' Line #',bomB+' Item Number',bomA+' Line #',bomA+' Item Number','Match Status',bomB+' Item Name',bomA+' Item Name','Name Match Status',bomB+' Revision',bomA+' Revision','Revision Match Status'];
+  const nrData = [nrHeader, nrCols];
+  d.nameRev.forEach(x => nrData.push([x.cmLine, x.cmItemNumber, x.arenaLine, x.itemNumber, 'MATCHED', x.cmName, x.arenaName, x.nameMatchStatus, x.cmRev, x.arenaRev, x.revMatchStatus]));
+  nrData.push([]);
+  nrData.push(['Total discrepancies:', d.nameRev.length]);
+  nrData.push(['Name mismatches:', d.nameRev.filter(x=>x.discrepancyType==='Name'||x.discrepancyType==='Both').length]);
+  nrData.push(['Revision mismatches:', d.nameRev.filter(x=>x.discrepancyType==='Revision'||x.discrepancyType==='Both').length]);
+  const nrWs = XLSX.utils.aoa_to_sheet(nrData);
+  nrWs['!cols'] = Array(11).fill({wch:18});
+  XLSX.utils.book_append_sheet(wb, nrWs, 'Item-Name-Rev Discrepancies');
+
+  // Tab 4: BOM Level Discrepancies
+  const lvlHeader = ['DISCREPANCIES ONLY - Items with matching levels are not shown'];
+  const lvlCols = [bomB+' Line #',bomB+' Level (Original)',bomB+' Level (Normalized)',bomB+' Item Number',bomA+' Line #',bomA+' Level (Original)',bomA+' Level (Normalized)',bomA+' Item Number','Level Match Status'];
+  const lvlData = [lvlHeader, lvlCols];
+  d.level.forEach(x => lvlData.push([x.cmLine, x.cmLevelOrig, x.cmLevelNorm, x.itemNumber, x.arenaLine, x.arenaLevelOrig, x.arenaLevelNorm, x.itemNumber, 'MISMATCH']));
+  lvlData.push([]);
+  lvlData.push(['Total level discrepancies:', d.level.length]);
+  if (d.level.length) lvlData.push(['Average difference:', (d.level.reduce((s,x)=>s+x.difference,0)/d.level.length).toFixed(1)]);
+  const lvlWs = XLSX.utils.aoa_to_sheet(lvlData);
+  lvlWs['!cols'] = Array(9).fill({wch:20});
+  XLSX.utils.book_append_sheet(wb, lvlWs, 'BOM Level Discrepancies');
+
+  // Tab 5: Quantity Discrepancies
+  const qHeader = ['DISCREPANCIES ONLY - Items with matching quantities are not shown'];
+  const qCols = [bomB+' Line #',bomB+' Item Number',bomB+' Quantity',bomA+' Line #',bomA+' Item Number',bomA+' Quantity','Quantity Match','Difference','% Difference','Severity'];
+  const qData = [qHeader, qCols];
+  d.quantity.forEach(x => qData.push([x.cmLine, x.cmItemNumber, x.cmQty, x.arenaLine, x.itemNumber, x.arenaQty, 'MISMATCH', x.difference, x.pctDifference+'%', x.severity]));
+  qData.push([]);
+  qData.push(['Total quantity discrepancies:', d.quantity.length]);
+  qData.push(['Critical:', d.quantity.filter(x=>x.severity==='Critical').length]);
+  qData.push(['Warning:', d.quantity.filter(x=>x.severity==='Warning').length]);
+  qData.push(['Minor:', d.quantity.filter(x=>x.severity==='Minor').length]);
+  const qWs = XLSX.utils.aoa_to_sheet(qData);
+  qWs['!cols'] = Array(10).fill({wch:16});
+  XLSX.utils.book_append_sheet(wb, qWs, 'Quantity Discrepancies');
+
+  // Tab 6: MPN & Manufacturer Discrepancies
+  const mpnHeader = ['DISCREPANCIES ONLY - Items with matching MPN/Manufacturer are not shown'];
+  const mpnCols = ['MPN',bomA+' Line #',bomA+' Item Numbers',bomA+' Manufacturer',bomB+' Line #',bomB+' Item Numbers',bomB+' Manufacturer','Item/MPN Match','Manufacturer Match %'];
+  const mpnData = [mpnHeader, mpnCols];
+  d.mpnMfr.forEach(x => mpnData.push([x.mpn, x.arenaLine, x.arenaItemNumber, x.arenaManufacturer, x.cmLine, x.cmItemNumber, x.cmManufacturer, x.mpnMatch, x.mfrMatchPct]));
+  mpnData.push([]);
+  mpnData.push(['Total MPN/Mfr discrepancies:', d.mpnMfr.length]);
+  mpnData.push(['Manufacturer only:', d.mpnMfr.filter(x=>x.discrepancyType==='Manufacturer').length]);
+  mpnData.push(['MPN only:', d.mpnMfr.filter(x=>x.discrepancyType==='MPN').length]);
+  mpnData.push(['Both:', d.mpnMfr.filter(x=>x.discrepancyType==='Both').length]);
+  const mpnWs = XLSX.utils.aoa_to_sheet(mpnData);
+  mpnWs['!cols'] = Array(9).fill({wch:20});
+  XLSX.utils.book_append_sheet(wb, mpnWs, 'MPN-Mfr Discrepancies');
+
+  // Tab 7: Ref Des Discrepancies (EE only)
+  if (includesRefDes()) {
+    const rdHeader = ['DISCREPANCIES ONLY - Items with matching ref des are not shown'];
+    const rdCols = ['Item Number','Item Name',bomA+' Ref Des',bomB+' Ref Des',bomA+' Ref Des Count',bomB+' Ref Des Count',bomA+' Quantity','Issue Type',bomA+' Line #',bomB+' Line #','Notes'];
+    const rdData = [rdHeader, rdCols];
+    d.refDes.forEach(x => rdData.push([x.itemNumber, x.itemName, x.arenaRefDes, x.cmRefDes, x.arenaRefCount, x.cmRefCount, x.arenaQty, x.issueType, x.arenaLine, x.cmLine, (x.arenaOnly?'Arena only: '+x.arenaOnly:'')+(x.cmOnly?' CM only: '+x.cmOnly:'')]));
+    // Also add detailed ref des mapping mismatches
+    if (r.rdDetail && r.rdDetail.length) {
+      rdData.push([]);
+      rdData.push(['DETAILED REF DES MAPPING']);
+      rdData.push(['Reference Designator',bomB+' Item Number',bomA+' Item Number','Match Status']);
+      r.rdDetail.forEach(x => rdData.push([x.refDes, x.cmItem, x.arenaItem, x.match]));
+    }
+    rdData.push([]);
+    rdData.push(['Total ref des discrepancies:', d.refDes.length]);
+    rdData.push(['Mismatches:', d.refDes.filter(x=>x.issueType.includes('Mismatch')).length]);
+    rdData.push(['Count errors:', d.refDes.filter(x=>x.issueType.includes('Count')).length]);
+    rdData.push(['Ranges found:', d.refDes.filter(x=>x.issueType.includes('Range')).length]);
+    const rdWs = XLSX.utils.aoa_to_sheet(rdData);
+    rdWs['!cols'] = Array(11).fill({wch:20});
+    XLSX.utils.book_append_sheet(wb, rdWs, 'Ref Des Discrepancies');
+  }
+
+  // Tab 8: Missing Items
+  const misData = [
+    ['ITEMS ONLY IN ' + bomA.toUpperCase() + ' (Missing from ' + bomB + ')'],
+    ['Item Number','Item Name','Revision','Quantity',bomA+' Line #','Notes']
+  ];
+  d.missingInCM.forEach(x => misData.push([x.itemNumber, x.itemName, x.revision, x.quantity, x.lineNumber, '']));
+  misData.push([]);
+  misData.push(['Items missing from ' + bomB + ': ' + d.missingInCM.length]);
+  misData.push([]);
+  misData.push(['ITEMS ONLY IN ' + bomB.toUpperCase() + ' (Missing from ' + bomA + ')']);
+  misData.push(['Item Number','Item Name','Revision','Quantity',bomB+' Line #','Notes']);
+  d.missingInArena.forEach(x => misData.push([x.itemNumber, x.itemName, x.revision, x.quantity, x.lineNumber, '']));
+  misData.push([]);
+  misData.push(['Items missing from ' + bomA + ': ' + d.missingInArena.length]);
+  misData.push(['Total missing items: ' + (d.missingInCM.length + d.missingInArena.length)]);
+  const misWs = XLSX.utils.aoa_to_sheet(misData);
+  misWs['!cols'] = [{wch:15},{wch:40},{wch:10},{wch:10},{wch:12},{wch:30}];
+  XLSX.utils.book_append_sheet(wb, misWs, 'Missing Items');
+
+  // Tab 9: Original Arena BOM
+  const arenaOrigData = [state.arenaHeaders, ...state.arenaData];
+  const arenaOrigWs = XLSX.utils.aoa_to_sheet(arenaOrigData);
+  XLSX.utils.book_append_sheet(wb, arenaOrigWs, 'Original ' + bomA);
+
+  // Tab 10: Original CM BOM (with normalized level)
+  const cmOrigHeaders = [...state.cmHeaders];
+  const levelIdx = cmOrigHeaders.indexOf(state.columnMap.cm.level);
+  if (levelIdx >= 0) cmOrigHeaders.splice(levelIdx + 1, 0, 'Normalized Level');
+  const cmOrigData = [cmOrigHeaders];
+  state.cmData.forEach((row, i) => {
+    const newRow = [...row];
+    if (levelIdx >= 0) {
+      const lvl = getMergedLevel(row, state.cmHeaders, state.columnMap.cm.level);
+      const lvlN = parseFloat(lvl);
+      const norm = !isNaN(lvlN) ? lvlN - r.cmRoot : '';
+      newRow.splice(levelIdx + 1, 0, norm);
+    }
+    cmOrigData.push(newRow);
+  });
+  const cmOrigWs = XLSX.utils.aoa_to_sheet(cmOrigData);
+  XLSX.utils.book_append_sheet(wb, cmOrigWs, 'Original ' + bomB);
+
+  state.workbook = wb;
+  log('Workbook built with ' + wb.SheetNames.length + ' tabs', 'success');
+}
+
+// ============================================================
+// RESULTS DISPLAY
+// ============================================================
+
+function populateResults() {
+  const r = state.results;
+  const d = r.d;
+  const matchPct = r.compared > 0 ? Math.round(r.exact/r.compared*100) : 0;
+
+  document.getElementById('results-subtitle').textContent = getAuditLabel() + ' Audit completed on ' + localDateString() + ' — ' + state.bomAName + ' vs ' + state.bomBName;
+
+  // Metrics
+  document.getElementById('metrics-grid').innerHTML =
+    '<div class="metric-card blue"><div class="metric-value">'+r.compared+'</div><div class="metric-label">Items Compared</div></div>' +
+    '<div class="metric-card green"><div class="metric-value">'+r.exact+'</div><div class="metric-label">Exact Matches</div><div class="metric-pct">'+matchPct+'%</div></div>' +
+    '<div class="metric-card red"><div class="metric-value">'+r.totalD+'</div><div class="metric-label">Total Discrepancies</div></div>' +
+    '<div class="metric-card orange"><div class="metric-value">'+(d.missingInCM.length+d.missingInArena.length)+'</div><div class="metric-label">Missing Items</div></div>';
+
+  // Breakdown
+  const items = [
+    {label:'Item Name Mismatches', count:d.nameRev.filter(x=>x.discrepancyType==='Name'||x.discrepancyType==='Both').length, cls:'red'},
+    {label:'Revision Mismatches', count:d.nameRev.filter(x=>x.discrepancyType==='Revision'||x.discrepancyType==='Both').length, cls:'yellow'},
+    {label:'BOM Level Mismatches', count:d.level.length, cls:'yellow'},
+    {label:'Quantity Discrepancies', count:d.quantity.length, cls:'red'},
+    {label:'MPN/Manufacturer Mismatches', count:d.mpnMfr.length, cls:'orange'},
+  ];
+  if (includesRefDes()) items.push({label:'Reference Designator Issues', count:d.refDes.length, cls:'blue'});
+  items.push({label:'Missing from ' + state.bomBName, count:d.missingInCM.length, cls:'orange'});
+  items.push({label:'Missing from ' + state.bomAName, count:d.missingInArena.length, cls:'orange'});
+
+  document.getElementById('breakdown-list').innerHTML = items.map(i =>
+    '<li class="breakdown-item"><span class="label">'+i.label+'</span><span class="badge badge-'+i.cls+'">'+i.count+'</span></li>'
+  ).join('');
+
+  // Tab Previews
+  const previews = document.getElementById('tab-previews');
+  previews.innerHTML = '';
+
+  function addPreview(title, headers, rows, maxRows) {
+    maxRows = maxRows || 10;
+    const div = document.createElement('div');
+    div.className = 'collapsible';
+    const hdr = document.createElement('div');
+    hdr.className = 'collapsible-header';
+    hdr.innerHTML = '<span>'+title+' <span class="badge badge-blue">'+rows.length+'</span></span><span class="arrow">▶</span>';
+    const body = document.createElement('div');
+    body.className = 'collapsible-body';
+    if (rows.length === 0) {
+      body.innerHTML = '<p style="color:var(--success)">✅ No discrepancies found</p>';
+    } else {
+      let html = '<table class="result-table"><thead><tr>';
+      headers.forEach(h => html += '<th>'+h+'</th>');
+      html += '</tr></thead><tbody>';
+      rows.slice(0, maxRows).forEach(row => {
+        html += '<tr>';
+        row.forEach(c => {
+          let cls = '';
+          const s = (c||'').toString();
+          if (s === 'MISMATCH' || s.includes('MISMATCH') || s === 'Critical') cls = ' class="mismatch"';
+          else if (s === 'MATCH' || s.includes('MATCH')) cls = ' class="match"';
+          else if (s === 'Warning') cls = ' class="warning"';
+          html += '<td'+cls+'>'+s+'</td>';
+        });
+        html += '</tr>';
+      });
+      html += '</tbody></table>';
+      if (rows.length > maxRows) html += '<p style="color:var(--text-secondary);font-size:12px;margin-top:8px">Showing '+maxRows+' of '+rows.length+' rows. Download XLSX for complete data.</p>';
+      body.innerHTML = html;
+    }
+    hdr.onclick = () => { hdr.classList.toggle('open'); body.classList.toggle('open'); };
+    div.appendChild(hdr);
+    div.appendChild(body);
+    previews.appendChild(div);
+  }
+
+  // Name/Rev preview
+  addPreview('Item Name & Revision Discrepancies',
+    [state.bomAName+' Item #',state.bomBName+' Item #',state.bomAName+' Name',state.bomBName+' Name','Name Match',state.bomAName+' Rev',state.bomBName+' Rev','Rev Match'],
+    d.nameRev.map(x=>[x.itemNumber,x.cmItemNumber,x.arenaName,x.cmName,x.nameMatchStatus,x.arenaRev,x.cmRev,x.revMatchStatus]));
+
+  // Level preview
+  addPreview('BOM Level Discrepancies',
+    ['Item #',state.bomAName+' Lvl (Orig)',state.bomAName+' Lvl (Norm)',state.bomBName+' Lvl (Orig)',state.bomBName+' Lvl (Norm)','Difference'],
+    d.level.map(x=>[x.itemNumber,x.arenaLevelOrig,x.arenaLevelNorm,x.cmLevelOrig,x.cmLevelNorm,x.difference]));
+
+  // Quantity preview
+  addPreview('Quantity Discrepancies',
+    ['Item #',state.bomAName+' Qty',state.bomBName+' Qty','Difference','% Diff','Severity'],
+    d.quantity.map(x=>[x.itemNumber,x.arenaQty,x.cmQty,x.difference,x.pctDifference+'%',x.severity]));
+
+  // MPN/Mfr preview
+  addPreview('MPN & Manufacturer Discrepancies',
+    ['MPN',state.bomAName+' Item',state.bomBName+' Item',state.bomAName+' Mfr',state.bomBName+' Mfr','MPN Match','Mfr Match %'],
+    d.mpnMfr.map(x=>[x.mpn,x.arenaItemNumber,x.cmItemNumber,x.arenaManufacturer,x.cmManufacturer,x.mpnMatch,x.mfrMatchPct]));
+
+  // Ref Des preview (EE)
+  if (includesRefDes()) {
+    addPreview('Reference Designator Discrepancies',
+      ['Item #','Issue Type',state.bomAName+' Ref Count',state.bomBName+' Ref Count',state.bomAName+' Qty',state.bomAName+' Only',state.bomBName+' Only'],
+      d.refDes.map(x=>[x.itemNumber,x.issueType,x.arenaRefCount,x.cmRefCount,x.arenaQty,x.arenaOnly,x.cmOnly]));
+  }
+
+  // Missing Items preview
+  addPreview('Missing Items',
+    ['Item #','Item Name','Source','Line #'],
+    [...d.missingInCM.map(x=>[x.itemNumber,x.itemName,state.bomAName+' Only (Missing from '+state.bomBName+')',x.lineNumber]),
+     ...d.missingInArena.map(x=>[x.itemNumber,x.itemName,state.bomBName+' Only (Missing from '+state.bomAName+')',x.lineNumber])]);
+
+  // Filename
+  const m = state.metadata;
+  const fn = [localDateString(), getAuditLabel()+' Audit', m.assemblyNumber, m.assemblyName, m.program, m.cm, m.build].filter(Boolean).join(', ');
+  document.getElementById('filename-preview').textContent = fn + '.xlsx';
+}
+
+// ============================================================
+// DOWNLOAD
+// ============================================================
+
+function downloadReport() {
+  if (!state.workbook) { showToast('No report to download','error'); return; }
+  const m = state.metadata;
+  const fn = [localDateString(), getAuditLabel()+' Audit', m.assemblyNumber, m.assemblyName, m.program, m.cm, m.build].filter(Boolean).join(', ') + '.xlsx';
+  XLSX.writeFile(state.workbook, fn);
+  showToast('Report downloaded: ' + fn, 'success');
+}
+
+// ============================================================
+// INIT
+// ============================================================
+document.addEventListener('DOMContentLoaded', () => {
+  // Prevent upload zone click from bubbling to file input twice
+  document.querySelectorAll('.upload-zone input[type=file]').forEach(inp => {
+    inp.addEventListener('click', e => e.stopPropagation());
+  });
+});
+</script>
+</body>
+</html>
