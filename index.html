@@ -210,7 +210,8 @@ body { font-family: var(--font); background: var(--bg-page); color: var(--text-p
 .result-table tr:nth-child(even) td { background:#e8e8e8; }
 .result-table tr:hover td { background:var(--yellow); }
 td.match { color:#000; font-weight:bold; background:#e0f7ff; }
-td.mismatch { color:#000; font-weight:bold; background:#f9c; text-transform:uppercase; }
+td.mismatch { color:#000; font-weight:bold; background:#f9c; }
+td.sub-mismatch { background:#fff3cd; color:#000; font-size:11px; line-height:1.6; }
 td.warning { color:#000; font-weight:bold; background:var(--yellow); }
 
 /* Modal */
@@ -1124,7 +1125,7 @@ function handleBuildChange() {
 // ---- Review Setup ----
 function setupReview() {
   const grid = document.getElementById('review-grid');
-  const comparisons = ['Item Number/Name/Revision', 'BOM Level', 'Quantity', 'MPN & Manufacturer'];
+  const comparisons = ['Item Number/Name/Revision', 'BOM Level', 'Quantity', 'MPN', 'Manufacturer'];
   if (includesRefDes()) comparisons.push('Reference Designators');
   comparisons.push('Missing Items');
 
@@ -1199,6 +1200,16 @@ function getColValue(row, headers, colName) {
   return '';
 }
 
+// Try to detect level value even when level column is skipped (N/A).
+// Scans all columns for a cell containing exactly "-1" or "*" to identify alternate rows.
+function detectLevelFromRow(row, headers) {
+  for (let i = 0; i < row.length; i++) {
+    const val = (row[i] || '').toString().trim();
+    if (val === '-1' || val === '*') return val;
+  }
+  return '';
+}
+
 function getMergedLevel(row, headers, levelColName) {
   if (!levelColName || levelColName === '__NA__') return '';
   const idx = headers.indexOf(levelColName);
@@ -1256,11 +1267,43 @@ async function runAudit() {
     let cmRoot = null, cmAudit = 0, cmExcl = 0;
     const cmExclEx = [];
 
+    // When level is skipped (__NA__), try to auto-detect the level column for alternate detection
+    const cmLevelSkipped = !cM.level || cM.level === '__NA__';
+    let cmLevelAutoIdx = -1;
+    if (cmLevelSkipped && state.cmData.length > 0) {
+      // Scan headers for common level column names
+      const lvlPatterns = ['level','lvl','lev','l','bom level'];
+      for (let hi = 0; hi < cH.length; hi++) {
+        const h = (cH[hi]||'').toLowerCase().trim();
+        if (lvlPatterns.includes(h)) { cmLevelAutoIdx = hi; break; }
+      }
+      // If no header match, scan first few rows for a column containing -1
+      if (cmLevelAutoIdx < 0) {
+        for (let hi = 0; hi < cH.length; hi++) {
+          for (let ri = 0; ri < Math.min(state.cmData.length, 20); ri++) {
+            const v = (state.cmData[ri][hi]||'').toString().trim();
+            if (v === '-1' || v === '*') { cmLevelAutoIdx = hi; break; }
+          }
+          if (cmLevelAutoIdx >= 0) break;
+        }
+      }
+    }
+    if (cmLevelSkipped && cmLevelAutoIdx >= 0) log(state.bomBName+': Level skipped but auto-detected level column at index '+cmLevelAutoIdx+' ("'+cH[cmLevelAutoIdx]+'") for -1 detection','warning');
+    else if (cmLevelSkipped) log(state.bomBName+': Level skipped, will scan rows for -1 values','warning');
+
     for (let i = 0; i < state.cmData.length; i++) {
       const row = state.cmData[i];
       const raw = getColValue(row, cH, cM.itemNumber);
       if (!raw) continue;
-      const lvl = getMergedLevel(row, cH, cM.level);
+      let lvl = getMergedLevel(row, cH, cM.level);
+      // If level was skipped, try auto-detected column, then scan entire row for -1
+      if (cmLevelSkipped) {
+        if (cmLevelAutoIdx >= 0) {
+          lvl = (row[cmLevelAutoIdx]||'').toString().trim();
+        } else {
+          lvl = detectLevelFromRow(row, cH);
+        }
+      }
       const lvlN = parseFloat(lvl);
       if (cmRoot === null && !isNaN(lvlN) && lvlN >= 0) cmRoot = lvlN;
       const it = {
@@ -1292,11 +1335,41 @@ async function runAudit() {
     let arRoot=null, arAudit=0, arExcl=0;
     const arExclEx = [];
 
+    // When level is skipped (__NA__), try to auto-detect the level column for alternate detection
+    const arLevelSkipped = !aM.level || aM.level === '__NA__';
+    let arLevelAutoIdx = -1;
+    if (arLevelSkipped && state.arenaData.length > 0) {
+      const lvlPatterns = ['level','lvl','lev','l','bom level'];
+      for (let hi = 0; hi < aH.length; hi++) {
+        const h = (aH[hi]||'').toLowerCase().trim();
+        if (lvlPatterns.includes(h)) { arLevelAutoIdx = hi; break; }
+      }
+      if (arLevelAutoIdx < 0) {
+        for (let hi = 0; hi < aH.length; hi++) {
+          for (let ri = 0; ri < Math.min(state.arenaData.length, 20); ri++) {
+            const v = (state.arenaData[ri][hi]||'').toString().trim();
+            if (v === '-1' || v === '*') { arLevelAutoIdx = hi; break; }
+          }
+          if (arLevelAutoIdx >= 0) break;
+        }
+      }
+    }
+    if (arLevelSkipped && arLevelAutoIdx >= 0) log(state.bomAName+': Level skipped but auto-detected level column at index '+arLevelAutoIdx+' ("'+aH[arLevelAutoIdx]+'") for -1 detection','warning');
+    else if (arLevelSkipped) log(state.bomAName+': Level skipped, will scan rows for -1 values','warning');
+
     for (let i=0; i<state.arenaData.length; i++) {
       const row = state.arenaData[i];
       const raw = getColValue(row,aH,aM.itemNumber);
       if (!raw) continue;
-      const lvl = getColValue(row,aH,aM.level);
+      let lvl = getColValue(row,aH,aM.level);
+      // If level was skipped, try auto-detected column, then scan entire row for -1
+      if (arLevelSkipped) {
+        if (arLevelAutoIdx >= 0) {
+          lvl = (row[arLevelAutoIdx]||'').toString().trim();
+        } else {
+          lvl = detectLevelFromRow(row, aH);
+        }
+      }
       const lvlN = parseFloat(lvl);
       if (arRoot===null && !isNaN(lvlN) && lvlN>=0) arRoot=lvlN;
       const it = {
@@ -1323,25 +1396,35 @@ async function runAudit() {
     await new Promise(r=>setTimeout(r,30));
 
     // Compare
-    const d = {nameRev:[],level:[],quantity:[],mpnMfr:[],refDes:[],missingInCM:[],missingInArena:[]};
+    const d = {nameRev:[],level:[],quantity:[],mpnDisc:[],mfrDisc:[],refDes:[],missingInCM:[],missingInArena:[]};
     let compared=0, exact=0;
     const cmSeen = new Set();
     const arLookup = {};
     arAll.filter(a=>a.isAuditType).forEach(it => { if (!arLookup[it.itemNumber]) arLookup[it.itemNumber]=[]; arLookup[it.itemNumber].push(it); });
 
     // Quantity aggregation — always aggregate total qty per item number across all occurrences.
-    // Exclude alternate vendor/supplier rows (level is "-1" or "*") to avoid double-counting.
+    // Exclude rows with level -1 (alternates/substitutes) to avoid double-counting.
+    // Check both raw level and normalized level, plus the isAlternate flag.
+    function isLevelNeg1(it) {
+      return it.isAlternate || it.levelNum === -1 || it.normalizedLevel === -1 ||
+             (it.level && it.level.toString().trim() === '-1');
+    }
     const arQA={}, cmQA={};
-    arAll.filter(a=>a.isAuditType&&!a.isAlternate).forEach(it => {
+    let arSkipped = 0, cmSkipped = 0;
+    arAll.filter(a=>a.isAuditType).forEach(it => {
+      if (isLevelNeg1(it)) { arSkipped++; log('Qty skip ('+state.bomAName+'): '+it.rawItemNumber+' line '+it.lineNumber+' level="'+it.level+'" levelNum='+it.levelNum+' normLevel='+it.normalizedLevel+' isAlt='+it.isAlternate); return; }
       if (!arQA[it.itemNumber]) arQA[it.itemNumber]={t:0, lines:[]};
       arQA[it.itemNumber].t += it.quantityNum;
       arQA[it.itemNumber].lines.push(it.lineNumber);
     });
-    cmAll.filter(a=>a.isAuditType&&!a.isAlternate).forEach(it => {
+    cmAll.filter(a=>a.isAuditType).forEach(it => {
+      if (isLevelNeg1(it)) { cmSkipped++; log('Qty skip ('+state.bomBName+'): '+it.rawItemNumber+' line '+it.lineNumber+' level="'+it.level+'" levelNum='+it.levelNum+' normLevel='+it.normalizedLevel+' isAlt='+it.isAlternate); return; }
       if (!cmQA[it.itemNumber]) cmQA[it.itemNumber]={t:0, lines:[]};
       cmQA[it.itemNumber].t += it.quantityNum;
       cmQA[it.itemNumber].lines.push(it.lineNumber);
     });
+    if (arSkipped) log('Skipped '+arSkipped+' level -1 rows from '+state.bomAName+' qty totals','warning');
+    if (cmSkipped) log('Skipped '+cmSkipped+' level -1 rows from '+state.bomBName+' qty totals','warning');
     // Round aggregated totals to avoid floating point drift
     for (const k in arQA) arQA[k].t = Math.round(arQA[k].t * 1000) / 1000;
     for (const k in cmQA) cmQA[k].t = Math.round(cmQA[k].t * 1000) / 1000;
@@ -1360,15 +1443,15 @@ async function runAudit() {
       const ns = nameIsMapped ? similarity(a.itemName,c.itemName) : 100;
       const rm = revIsMapped ? a.normalizedRevision.toLowerCase()===c.normalizedRevision.toLowerCase() : true;
       const nm = ns===100;
-      if ((nameIsMapped || revIsMapped) && (!nm||!rm)) { bad=true; d.nameRev.push({itemNumber:a.rawItemNumber,cmItemNumber:c.rawItemNumber,arenaName:a.itemName,cmName:c.itemName,nameSimilarity:ns,nameMatchStatus:nm?'MATCH':'MISMATCH ('+ns+'%)',arenaRev:a.revision,cmRev:c.revision,arenaNormRev:a.normalizedRevision,cmNormRev:c.normalizedRevision,revMatchStatus:rm?'MATCH':'MISMATCH',discrepancyType:(!nm&&!rm)?'Both':(!nm?'Name':'Revision'),arenaLine:a.lineNumber,cmLine:c.lineNumber}); }
+      if ((nameIsMapped || revIsMapped) && (!nm||!rm)) { bad=true; d.nameRev.push({itemNumber:a.rawItemNumber,cmItemNumber:c.rawItemNumber,arenaName:a.itemName,cmName:c.itemName,nameSimilarity:ns,nameMatchStatus:nm?'Match':'Mismatch ('+ns+'%)',arenaRev:a.revision,cmRev:c.revision,arenaNormRev:a.normalizedRevision,cmNormRev:c.normalizedRevision,revMatchStatus:rm?'Match':'Mismatch',discrepancyType:(!nm&&!rm)?'Both':(!nm?'Name':'Revision'),arenaLine:a.lineNumber,cmLine:c.lineNumber}); }
 
       // Level (skip if N/A, or if either item lacks a level value)
       if (isFieldMapped('level')&&a.hasLevel&&c.hasLevel&&a.normalizedLevel!==null&&c.normalizedLevel!==null&&!a.isAlternate&&!c.isAlternate&&a.normalizedLevel!==c.normalizedLevel) { bad=true; d.level.push({itemNumber:a.rawItemNumber,itemName:a.itemName,arenaLevelOrig:a.level,cmLevelOrig:c.level,arenaLevelNorm:a.normalizedLevel,cmLevelNorm:c.normalizedLevel,difference:Math.abs(a.normalizedLevel-c.normalizedLevel),arenaLine:a.lineNumber,cmLine:c.lineNumber}); }
 
-      // Quantity — always use aggregated totals (skip if N/A or both sides are alternate-only)
+      // Quantity — always use aggregated totals (skip level -1 items entirely)
       if (isFieldMapped('quantity')) {
-        const aq = arQA[iNum] ? arQA[iNum].t : (a.isAlternate ? null : a.quantityNum);
-        const cq = cmQA[iNum] ? cmQA[iNum].t : (c.isAlternate ? null : c.quantityNum);
+        const aq = arQA[iNum] ? arQA[iNum].t : (isLevelNeg1(a) ? null : a.quantityNum);
+        const cq = cmQA[iNum] ? cmQA[iNum].t : (isLevelNeg1(c) ? null : c.quantityNum);
         if (aq !== null && cq !== null && Math.abs(aq - cq) > 0.001) {
           bad=true;
           const df = Math.round(Math.abs(aq - cq) * 1000) / 1000;
@@ -1382,13 +1465,104 @@ async function runAudit() {
         }
       }
 
-      // MPN/Mfr (skip if both N/A)
+      // MPN/Mfr comparison — collect ALL MPNs from all rows for this item, compare sets
       const mfrMapped = isFieldMapped('manufacturer') || isFieldMapped('mpn');
       const gen=a.itemNumber.startsWith('E-GRE')||a.itemNumber.startsWith('E-GCA');
       if (mfrMapped && !gen) {
-        const am=(a.mpn||'').toUpperCase().trim(), cm2=(c.mpn||'').toUpperCase().trim();
-        const ms=similarity(a.manufacturer,c.manufacturer), mm=am===cm2, mfm=ms===100;
-        if (!mm||!mfm) { if(am||cm2||a.manufacturer||c.manufacturer) { bad=true; d.mpnMfr.push({mpn:am||cm2||'N/A',arenaItemNumber:a.rawItemNumber,cmItemNumber:c.rawItemNumber,arenaManufacturer:a.manufacturer,cmManufacturer:c.manufacturer,arenaMPN:a.mpn,cmMPN:c.mpn,mpnMatch:mm?'MATCH':((!am&&!cm2)?'No MPN':'MISMATCH'),mfrMatchPct:ms===100?'MATCH':'MISMATCH ('+ms+'%)',discrepancyType:(!mm&&!mfm)?'Both':(!mm?'MPN':'Manufacturer'),arenaLine:a.lineNumber,cmLine:c.lineNumber}); } }
+        // Expand semicolons into individual MPN/Manufacturer entries
+        function expandSemicolonEntries(items) {
+          const result = [];
+          items.forEach(it => {
+            const mpnRaw = (it.mpn || '').trim();
+            const mfrRaw = (it.manufacturer || '').trim();
+            const mpns = mpnRaw.includes(';') ? mpnRaw.split(';').map(s => s.trim().toUpperCase()).filter(Boolean) : [mpnRaw.toUpperCase()];
+            const mfrs = mfrRaw.includes(';') ? mfrRaw.split(';').map(s => s.trim()) : [mfrRaw];
+            mpns.forEach((mpn, idx) => {
+              if (mpn) result.push({ mpn: mpn, mfr: mfrs[idx] || mfrs[mfrs.length - 1] || '', line: it.lineNumber });
+            });
+          });
+          return result;
+        }
+        const aAllMpns = expandSemicolonEntries(aItems);
+        const cAllMpns = expandSemicolonEntries(cItems);
+
+        // Build full MPN sets for each BOM
+        const aAllMpnSet = new Set(aAllMpns.map(x => x.mpn));
+        const cAllMpnSet = new Set(cAllMpns.map(x => x.mpn));
+
+        // Find CM MPNs NOT in Arena (these are mismatches)
+        const cmOnlyMpns = cAllMpns.filter(x => !aAllMpnSet.has(x.mpn));
+        // Check if neither BOM has any MPNs
+        const noMpns = aAllMpns.length === 0 && cAllMpns.length === 0;
+
+        // For manufacturer comparison, find the best match across all MPN pairs
+        let bestMfrSim = similarity(a.manufacturer, c.manufacturer);
+        let bestArenaMfr = a.manufacturer;
+        let bestCmMfr = c.manufacturer;
+        for (const aEntry of aAllMpns) {
+          for (const cEntry of cAllMpns) {
+            if (aEntry.mpn === cEntry.mpn) {
+              const s = similarity(aEntry.mfr, cEntry.mfr);
+              if (s > bestMfrSim) { bestMfrSim = s; bestArenaMfr = aEntry.mfr; bestCmMfr = cEntry.mfr; }
+            }
+          }
+        }
+        const mfm = bestMfrSim === 100;
+
+        // Flag if any CM MPN is not in Arena, or no MPNs exist, or manufacturers differ
+        const hasMpnMismatch = cmOnlyMpns.length > 0;
+        const shouldFlag = hasMpnMismatch || noMpns || !mfm;
+
+        if (shouldFlag && (aAllMpns.length > 0 || cAllMpns.length > 0 || a.manufacturer || c.manufacturer)) {
+          bad = true;
+
+          // --- MPN Discrepancies ---
+          if (hasMpnMismatch || noMpns) {
+            // Build detail: list mismatched CM MPNs in bold, then matched MPNs
+            const mismatchedList = cmOnlyMpns.map(x => x.mpn + ' (' + (x.mfr || 'No Mfr') + ')');
+            const matchedCmMpns = cAllMpns.filter(x => aAllMpnSet.has(x.mpn));
+            const matchedList = matchedCmMpns.map(x => x.mpn + ' (' + (x.mfr || 'No Mfr') + ')');
+
+            // Separate mismatch detail from matched detail
+            const mismatchDetail = mismatchedList.length ? '❌ Not in ' + state.bomAName + ': ' + mismatchedList.join('; ') : '';
+            const matchedDetail = matchedList.length ? '✅ Matched: ' + matchedList.join('; ') : '';
+
+            // MPN Match label — only show mismatches and No MPN
+            let mpnMatchLabel;
+            if (noMpns) mpnMatchLabel = 'No MPN';
+            else mpnMatchLabel = 'Mismatch';
+
+            // Build display strings showing all MPNs for each BOM
+            const arenaMpnDisplay = aAllMpns.map(x => x.mpn + ' (' + (x.mfr || 'No Mfr') + ')').join('; ') || 'None';
+            const cmMpnDisplay = cAllMpns.map(x => x.mpn + ' (' + (x.mfr || 'No Mfr') + ')').join('; ') || 'None';
+
+            d.mpnDisc.push({
+              arenaItemNumber: a.rawItemNumber,
+              cmItemNumber: c.itemNumber,
+              arenaMPN: arenaMpnDisplay,
+              cmMPN: cmMpnDisplay,
+              mpnMatch: mpnMatchLabel,
+              mismatchDetail: mismatchDetail,
+              matchedDetail: matchedDetail,
+              mismatchedCount: cmOnlyMpns.length,
+              arenaLine: a.lineNumber,
+              cmLine: c.lineNumber
+            });
+          }
+
+          // --- Manufacturer Discrepancies ---
+          if (!mfm && (a.manufacturer || c.manufacturer)) {
+            d.mfrDisc.push({
+              arenaItemNumber: a.rawItemNumber,
+              cmItemNumber: c.itemNumber,
+              arenaManufacturer: bestArenaMfr,
+              cmManufacturer: bestCmMfr,
+              mfrMatchPct: bestMfrSim + '%',
+              arenaLine: a.lineNumber,
+              cmLine: c.lineNumber
+            });
+          }
+        }
       }
 
       // RefDes (EE items in EE or FULL mode, skip if N/A)
@@ -1396,8 +1570,8 @@ async function runAudit() {
         const ar2=parseRefDes(a.refDes),cr2=parseRefDes(c.refDes);
         let iss=[];
         if (hasRange(a.refDes)||hasRange(c.refDes)) iss.push('Range Found');
-        if (!a.isAlternate&&ar2.length>0&&ar2.length!==a.quantityNum) iss.push('Count Error (Arena: '+ar2.length+' refs vs qty '+a.quantityNum+')');
-        if (!c.isAlternate&&cr2.length>0&&cr2.length!==c.quantityNum) iss.push('Count Error (CM: '+cr2.length+' refs vs qty '+c.quantityNum+')');
+        if (!isLevelNeg1(a)&&ar2.length>0&&ar2.length!==a.quantityNum) iss.push('Count Error (Arena: '+ar2.length+' refs vs qty '+a.quantityNum+')');
+        if (!isLevelNeg1(c)&&cr2.length>0&&cr2.length!==c.quantityNum) iss.push('Count Error (CM: '+cr2.length+' refs vs qty '+c.quantityNum+')');
         const aS=new Set(ar2.map(r=>r.toUpperCase())),cS=new Set(cr2.map(r=>r.toUpperCase()));
         const aO=[...aS].filter(r=>!cS.has(r)),cO=[...cS].filter(r=>!aS.has(r));
         if (aO.length||cO.length) iss.push('Mismatch');
@@ -1425,13 +1599,13 @@ async function runAudit() {
       cmAll.filter(rdFilter).forEach(it=>parseRefDes(it.refDes).forEach(rd=>{crm[rd.toUpperCase()]=it.itemNumber;}));
       new Set([...Object.keys(arm),...Object.keys(crm)]).forEach(rd=>{
         const ai=arm[rd]||'',ci=crm[rd]||'';
-        if (ai!==ci) rdDetail.push({refDes:rd,arenaItem:ai,cmItem:ci,match:'MISMATCH'});
+        if (ai!==ci) rdDetail.push({refDes:rd,arenaItem:ai,cmItem:ci,match:'Mismatch'});
       });
     }
 
     setProgress(70,'Generating report...');
     await new Promise(r=>setTimeout(r,30));
-    const totalD=d.nameRev.length+d.level.length+d.quantity.length+d.mpnMfr.length+d.refDes.length+d.missingInCM.length+d.missingInArena.length;
+    const totalD=d.nameRev.length+d.level.length+d.quantity.length+d.mpnDisc.length+d.mfrDisc.length+d.refDes.length+d.missingInCM.length+d.missingInArena.length;
 
     state.results = { d, compared, exact, totalD, arenaTotal:arAll.length, cmTotal:cmAll.length,
       arAudit:arAudit, cmAudit:cmAudit, arExcl, cmExcl, arExclEx, cmExclEx, rdDetail, arAll, cmAll, arRoot, cmRoot };
@@ -1490,7 +1664,8 @@ function buildWorkbook() {
     ['Item-Name-Rev Discrepancies','MISMATCHES ONLY - Item name and revision differences'],
     ['BOM Level Discrepancies','MISMATCHES ONLY - BOM hierarchy level differences'],
     ['Quantity Discrepancies','MISMATCHES ONLY - Quantity/usage differences'],
-    ['MPN-Mfr Discrepancies','MISMATCHES ONLY - MPN and manufacturer differences'],
+    ['MPN Discrepancies','MISMATCHES ONLY - MPN/part number differences'],
+    ['Manufacturer Discrepancies','MISMATCHES ONLY - Manufacturer name differences'],
   ];
   if (includesRefDes()) tocData.push(['Ref Des Discrepancies','MISMATCHES ONLY - Reference designator issues']);
   tocData.push(['Missing Items','Items found in only one BOM']);
@@ -1523,7 +1698,8 @@ function buildWorkbook() {
     ['Revision Mismatches', d.nameRev.filter(x=>x.discrepancyType==='Revision'||x.discrepancyType==='Both').length],
     ['BOM Level Mismatches', d.level.length],
     ['Quantity Discrepancies', d.quantity.length],
-    ['MPN/Manufacturer Mismatches', d.mpnMfr.length],
+    ['MPN Mismatches', d.mpnDisc.length],
+    ['Manufacturer Mismatches', d.mfrDisc.length],
   ];
   if (includesRefDes()) sumData.push(['Reference Designator Issues', d.refDes.length]);
   sumData.push([]);
@@ -1572,7 +1748,7 @@ function buildWorkbook() {
   const lvlHeader = ['DISCREPANCIES ONLY - Items with matching levels are not shown'];
   const lvlCols = [bomA+' Line #',bomA+' Item Number',bomA+' Level (Original)',bomA+' Level (Normalized)',bomB+' Line #',bomB+' Item Number',bomB+' Level (Original)',bomB+' Level (Normalized)','Level Match Status'];
   const lvlData = [lvlHeader, lvlCols];
-  d.level.forEach(x => lvlData.push([x.arenaLine, x.itemNumber, x.arenaLevelOrig, x.arenaLevelNorm, x.cmLine, x.itemNumber, x.cmLevelOrig, x.cmLevelNorm, 'MISMATCH']));
+  d.level.forEach(x => lvlData.push([x.arenaLine, x.itemNumber, x.arenaLevelOrig, x.arenaLevelNorm, x.cmLine, x.itemNumber, x.cmLevelOrig, x.cmLevelNorm, 'Mismatch']));
   lvlData.push([]);
   lvlData.push(['Total level discrepancies:', d.level.length]);
   if (d.level.length) lvlData.push(['Average difference:', (d.level.reduce((s,x)=>s+x.difference,0)/d.level.length).toFixed(1)]);
@@ -1584,26 +1760,34 @@ function buildWorkbook() {
   const qHeader = ['DISCREPANCIES ONLY - Items with matching quantities are not shown'];
   const qCols = [bomA+' Line #',bomA+' Item Number',bomA+' Quantity',bomB+' Line #',bomB+' Item Number',bomB+' Quantity','Quantity Match','Difference'];
   const qData = [qHeader, qCols];
-  d.quantity.forEach(x => qData.push([x.arenaLine, x.itemNumber, x.arenaQty, x.cmLine, x.cmItemNumber, x.cmQty, 'MISMATCH', x.difference]));
+  d.quantity.forEach(x => qData.push([x.arenaLine, x.itemNumber, x.arenaQty, x.cmLine, x.cmItemNumber, x.cmQty, 'Mismatch', x.difference]));
   qData.push([]);
   qData.push(['Total quantity discrepancies:', d.quantity.length]);
   const qWs = XLSX.utils.aoa_to_sheet(qData);
   qWs['!cols'] = Array(8).fill({wch:16});
   XLSX.utils.book_append_sheet(wb, qWs, 'Quantity Discrepancies');
 
-  // Tab 6: MPN & Manufacturer Discrepancies
-  const mpnHeader = ['DISCREPANCIES ONLY - Items with matching MPN/Manufacturer are not shown'];
-  const mpnCols = [bomA+' Line #',bomA+' Item Numbers',bomA+' MPN',bomA+' Manufacturer',bomB+' Line #',bomB+' Item Numbers',bomB+' MPN',bomB+' Manufacturer','MPN Match','Manufacturer Match %'];
+  // Tab 6: MPN Discrepancies
+  const mpnHeader = ['MISMATCHES ONLY - Items with matching MPNs are not shown'];
+  const mpnCols = [bomA+' Line #',bomA+' Item Number',bomA+' MPNs',bomB+' Line #',bomB+' Item Number',bomB+' MPNs','MPN Match','Mismatched MPNs','Matched MPNs'];
   const mpnData = [mpnHeader, mpnCols];
-  d.mpnMfr.forEach(x => mpnData.push([x.arenaLine, x.arenaItemNumber, x.arenaMPN, x.arenaManufacturer, x.cmLine, x.cmItemNumber, x.cmMPN, x.cmManufacturer, x.mpnMatch, x.mfrMatchPct]));
+  d.mpnDisc.forEach(x => mpnData.push([x.arenaLine, x.arenaItemNumber, x.arenaMPN, x.cmLine, x.cmItemNumber, x.cmMPN, x.mpnMatch, x.mismatchDetail, x.matchedDetail]));
   mpnData.push([]);
-  mpnData.push(['Total MPN/Mfr discrepancies:', d.mpnMfr.length]);
-  mpnData.push(['Manufacturer only:', d.mpnMfr.filter(x=>x.discrepancyType==='Manufacturer').length]);
-  mpnData.push(['MPN only:', d.mpnMfr.filter(x=>x.discrepancyType==='MPN').length]);
-  mpnData.push(['Both:', d.mpnMfr.filter(x=>x.discrepancyType==='Both').length]);
+  mpnData.push(['Total MPN discrepancies:', d.mpnDisc.length]);
   const mpnWs = XLSX.utils.aoa_to_sheet(mpnData);
-  mpnWs['!cols'] = Array(10).fill({wch:20});
-  XLSX.utils.book_append_sheet(wb, mpnWs, 'MPN-Mfr Discrepancies');
+  mpnWs['!cols'] = Array(9).fill({wch:28});
+  XLSX.utils.book_append_sheet(wb, mpnWs, 'MPN Discrepancies');
+
+  // Tab 7: Manufacturer Discrepancies
+  const mfrHeader = ['MISMATCHES ONLY - Items with matching manufacturers are not shown'];
+  const mfrCols = [bomA+' Line #',bomA+' Item Number',bomA+' Manufacturer',bomB+' Line #',bomB+' Item Number',bomB+' Manufacturer','Manufacturer Match %'];
+  const mfrData = [mfrHeader, mfrCols];
+  d.mfrDisc.forEach(x => mfrData.push([x.arenaLine, x.arenaItemNumber, x.arenaManufacturer, x.cmLine, x.cmItemNumber, x.cmManufacturer, x.mfrMatchPct]));
+  mfrData.push([]);
+  mfrData.push(['Total manufacturer discrepancies:', d.mfrDisc.length]);
+  const mfrWs = XLSX.utils.aoa_to_sheet(mfrData);
+  mfrWs['!cols'] = Array(7).fill({wch:24});
+  XLSX.utils.book_append_sheet(wb, mfrWs, 'Manufacturer Discrepancies');
 
   // Tab 7: Ref Des Discrepancies (EE only)
   if (includesRefDes()) {
@@ -1688,7 +1872,6 @@ function populateResults() {
   // Metrics
   document.getElementById('metrics-grid').innerHTML =
     '<div class="metric-card blue"><div class="metric-value">'+r.compared+'</div><div class="metric-label">Items Compared</div></div>' +
-    '<div class="metric-card green"><div class="metric-value">'+r.exact+'</div><div class="metric-label">Exact Matches</div><div class="metric-pct">'+matchPct+'%</div></div>' +
     '<div class="metric-card red"><div class="metric-value">'+r.totalD+'</div><div class="metric-label">Total Discrepancies</div></div>' +
     '<div class="metric-card orange"><div class="metric-value">'+(d.missingInCM.length+d.missingInArena.length)+'</div><div class="metric-label">Missing Items</div></div>';
 
@@ -1698,7 +1881,8 @@ function populateResults() {
     {label:'Revision Mismatches', count:d.nameRev.filter(x=>x.discrepancyType==='Revision'||x.discrepancyType==='Both').length, cls:'red'},
     {label:'BOM Level Mismatches', count:d.level.length, cls:'red'},
     {label:'Quantity Discrepancies', count:d.quantity.length, cls:'red'},
-    {label:'MPN/Manufacturer Mismatches', count:d.mpnMfr.length, cls:'red'},
+    {label:'MPN Mismatches', count:d.mpnDisc.length, cls:'red'},
+    {label:'Manufacturer Mismatches', count:d.mfrDisc.length, cls:'red'},
   ];
   if (includesRefDes()) items.push({label:'Reference Designator Issues', count:d.refDes.length, cls:'red'});
   items.push({label:'Missing from ' + state.bomBName, count:d.missingInCM.length, cls:'red'});
@@ -1745,9 +1929,15 @@ function populateResults() {
         row.forEach(c => {
           let cls = '';
           const s = (c||'').toString();
-          if (s === 'MISMATCH' || s.includes('MISMATCH') || s === 'No MPN') cls = ' class="mismatch"';
-          else if (s === 'MATCH' || s.includes('MATCH')) cls = ' class="match"';
-          html += '<td'+cls+'>'+s+'</td>';
+          // Convert newlines to <br> and render bold markers for substitute detail mismatches
+          let display = s.replace(/\{\{bold\}\}/g, '<b>').replace(/\{\{\/bold\}\}/g, '</b>')
+                         .replace(/\n/g, '<br>');
+          const sLower = s.toLowerCase();
+          // Highlight mismatch cells red: explicit "mismatch", "No MPN", ❌, or percentage values below 100%
+          const pctMatch = s.match(/^(\d+)%$/);
+          if (sLower.includes('mismatch') || s === 'No MPN' || s.includes('❌') || (pctMatch && parseInt(pctMatch[1]) < 100)) cls = ' class="mismatch"';
+          else if (sLower.includes('match') || (pctMatch && parseInt(pctMatch[1]) === 100)) cls = ' class="match"';
+          html += '<td'+cls+'>'+display+'</td>';
         });
         html += '</tr>';
       });
@@ -1771,20 +1961,26 @@ function populateResults() {
   // Level preview
   addPreview('BOM Level Discrepancies',
     ['Item #',state.bomAName+' Level (Normalized)',state.bomBName+' Level (Normalized)','Match?'],
-    d.level.map(x=>[x.itemNumber,x.arenaLevelNorm,x.cmLevelNorm,'MISMATCH']),
+    d.level.map(x=>[x.itemNumber,x.arenaLevelNorm,x.cmLevelNorm,'Mismatch']),
     {skipped: !isFieldMapped('level')});
 
   // Quantity preview
   addPreview('Quantity Discrepancies',
     ['Item #',state.bomAName+' Qty',state.bomBName+' Qty','Difference','Match?'],
-    d.quantity.map(x=>[x.itemNumber,x.arenaQty,x.cmQty,x.difference,'MISMATCH']),
+    d.quantity.map(x=>[x.itemNumber,x.arenaQty,x.cmQty,x.difference,'Mismatch']),
     {skipped: !isFieldMapped('quantity')});
 
-  // MPN/Mfr preview
-  addPreview('MPN & Manufacturer Discrepancies',
-    [state.bomAName+' Item',state.bomAName+' MPN',state.bomAName+' Mfr',state.bomBName+' Item',state.bomBName+' MPN',state.bomBName+' Mfr','MPN Match?','Mfr Match?'],
-    d.mpnMfr.map(x=>[x.arenaItemNumber,x.arenaMPN,x.arenaManufacturer,x.cmItemNumber,x.cmMPN,x.cmManufacturer,x.mpnMatch,x.mfrMatchPct]),
-    {skipped: !isFieldMapped('manufacturer') && !isFieldMapped('mpn')});
+  // MPN Discrepancies preview — only show mismatches, not matched MPNs
+  addPreview('MPN Discrepancies',
+    [state.bomAName+' Item',state.bomAName+' MPNs',state.bomBName+' Item',state.bomBName+' MPNs','MPN Match','Mismatched MPNs'],
+    d.mpnDisc.map(x=>[x.arenaItemNumber,x.arenaMPN,x.cmItemNumber,x.cmMPN,x.mpnMatch,x.mismatchDetail||'']),
+    {skipped: !isFieldMapped('mpn')});
+
+  // Manufacturer Discrepancies preview
+  addPreview('Manufacturer Discrepancies',
+    [state.bomAName+' Item',state.bomAName+' Manufacturer',state.bomBName+' Item',state.bomBName+' Manufacturer','Match %'],
+    d.mfrDisc.map(x=>[x.arenaItemNumber,x.arenaManufacturer,x.cmItemNumber,x.cmManufacturer,x.mfrMatchPct]),
+    {skipped: !isFieldMapped('manufacturer')});
 
   // Ref Des preview (EE)
   if (includesRefDes()) {
@@ -1832,7 +2028,56 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   // Ensure multi-col checkbox is unchecked on load
   document.getElementById('multi-col-level').checked = false;
+
+  // Idle detection — pulse the hidden game button after 5 min of inactivity
+  let pulseInterval = null, isIdle = false;
+  const IDLE_THRESHOLD = 1800000; // 30 minutes
+  const PULSE_EVERY = 15000;     // 15 seconds
+  const pageLoadTime = Date.now();
+  // Create aura element once, centered on the button
+  const aura = document.createElement('div');
+  aura.style.cssText = 'position:fixed;bottom:-76px;left:-76px;width:180px;height:180px;border-radius:50%;pointer-events:none;z-index:998;opacity:0;transition:opacity 0.6s ease-out;';
+  document.body.appendChild(aura);
+
+  function pulseBtn() {
+    const btn = document.getElementById('game-btn');
+    if (!btn) return;
+    // Outline the button
+    btn.style.transition = 'outline 0.1s ease-in, opacity 0.1s ease-in';
+    btn.style.opacity = '1';
+    btn.style.outline = '2px solid rgba(0,255,255,0.9)';
+    btn.style.borderRadius = '3px';
+    // Aura centered on button (button is at bottom:4px left:4px, 20px square — center is 14px from corner)
+    aura.style.transition = 'opacity 0.4s ease-in';
+    aura.style.opacity = '1';
+    aura.style.background = 'radial-gradient(circle, rgba(0,255,255,0.8) 0%, rgba(255,0,255,0.4) 40%, rgba(255,255,0,0.15) 65%, transparent 80%)';
+    aura.style.boxShadow = '0 0 90px 45px rgba(0,255,255,0.6), 0 0 180px 75px rgba(255,0,255,0.3), 0 0 240px 105px rgba(255,255,0,0.15)';
+    setTimeout(() => {
+      aura.style.transition = 'opacity 0.6s ease-out';
+      aura.style.opacity = '0';
+      btn.style.transition = 'outline 0.6s ease-out, opacity 0.6s ease-out';
+      btn.style.opacity = '0';
+      btn.style.outline = 'none';
+    }, 400);
+  }
+  function checkIdle() {
+    if (!isIdle && Date.now() - pageLoadTime >= IDLE_THRESHOLD) {
+      isIdle = true;
+      pulseBtn();
+      pulseInterval = setInterval(pulseBtn, PULSE_EVERY);
+    }
+  }
+  setInterval(checkIdle, 5000);
 });
 </script>
+<!-- Secret snake game trigger -->
+<!-- Secret game trigger -->
+<div id="game-btn" onclick="window.open('https://blockcell.sqprod.co/sites/joust/','_blank','width=660,height=750')" style="position:fixed;bottom:4px;left:4px;width:20px;height:20px;cursor:default;z-index:999;opacity:0;"></div>
+
+<!-- Game removed - now launches Joust in a new window -->
+
+<footer style="position:fixed;bottom:0;right:0;padding:6px 14px;font-size:11px;color:#888;background:rgba(30,30,30,0.85);border-top-left-radius:6px;z-index:900;pointer-events:none;">
+  Tool Revision: 2026-03-27 02:33 PM PDT
+</footer>
 </body>
 </html>
